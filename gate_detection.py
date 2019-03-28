@@ -1,19 +1,22 @@
 import cv2 as cv
 import numpy as np
 
+# Read an image and create a copy
 #src = cv.imread('red_gate.jpg', 1)
 #img = np.copy(src)
 
 vid = cv.VideoCapture(0)
 
-while(True):
+# Loop through each frame
+while True:
+
+	# ret (return) is true if img successfully found otherwise false.
+	# Type is tuple.
 	ret, img = vid.read()
 
 	# Blur the image to reduce noise then convert to HSV color space
 	blur = cv.GaussianBlur(img, (5, 5), 0)
 	hsv = cv.cvtColor(blur, cv.COLOR_BGR2HSV)
-
-	#cv.imshow("Blurred", blur)
 
 	# Red color hue values range from approx 167 to 10 hence 2 separate masks 
 	# are required and combined
@@ -47,6 +50,7 @@ while(True):
 	cv.namedWindow("Frame", cv.WINDOW_NORMAL)
 	cv.resizeWindow("Frame", 600, 400)
 	#cv.imshow("Source", src)
+	#cv.imshow("Blurred", blur)
 	cv.imshow("Frame", img)
 
 	#cv.waitKey(0)
