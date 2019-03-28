@@ -46,7 +46,13 @@ while True:
 		# box. Plot rectangle, coords, color, thickness
 		x, y, w, h = cv.boundingRect(max_cnt)
 		cv.rectangle(img, (x,y), (x+w, y+h), (0, 255, 255), 1)
-		cv.circle(img, (x+w/2, y+h/2), 7, (255, 255, 255), -1)
+
+		# Compute the centre of the bounding box and plot (on img, using centre
+		# coords, radius, color, filled)
+		centre = (int(x + w/2), int(y + h/2))
+		cv.circle(img, centre, 5, (255, 255, 255), -1)
+
+		# Compute distance from centre of image to centre of box
 
 	cv.namedWindow("Frame", cv.WINDOW_NORMAL)
 	cv.resizeWindow("Frame", 600, 400)
