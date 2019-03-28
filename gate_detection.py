@@ -42,10 +42,11 @@ while True:
 		# Draw contours on img, biggest one, all of them, color, thickness
 		cv.drawContours(img, max_cnt, -1, (0, 255, 0), 2)
 
-		# Find x, y (top left box coords) and w, h (width and height) of the bounding box
-		# Plot rectangle, coords, color, thickness
+		# Find x, y (top left box coords) and w, h (width and height) of the bounding
+		# box. Plot rectangle, coords, color, thickness
 		x, y, w, h = cv.boundingRect(max_cnt)
 		cv.rectangle(img, (x,y), (x+w, y+h), (0, 255, 255), 1)
+		cv.circle(img, (x+w/2, y+h/2), 7, (255, 255, 255), -1)
 
 	cv.namedWindow("Frame", cv.WINDOW_NORMAL)
 	cv.resizeWindow("Frame", 600, 400)
