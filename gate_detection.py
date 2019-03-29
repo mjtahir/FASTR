@@ -20,11 +20,11 @@ while True:
 
 	# Red color hue values range from approx 167 to 10 hence 2 separate masks 
 	# are required and combined
-	red_lower = np.array([0, 90, 89])
+	red_lower = np.array([0, 120, 70])
 	red_upper = np.array([10, 255, 255])
 	mask_hsv1 = cv.inRange(hsv, red_lower, red_upper)
-	red_lower = np.array([167, 90, 89])
-	red_upper = np.array([179, 255, 255])
+	red_lower = np.array([170, 120, 70])
+	red_upper = np.array([180, 255, 255])
 	mask_hsv2 = cv.inRange(hsv, red_lower, red_upper)
 
 	# Combine the masks
