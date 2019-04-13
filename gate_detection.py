@@ -36,15 +36,42 @@ while True:
 	# If at least 1 contour found
 	if len(contours) != 0:
 
-		# Find the biggest contour from contours array
-		max_cnt = max(contours, key = cv.contourArea)
+		# Define max area contour and loop through each contour
+		max_cnt = 0
+		for cnt in contours:
+
+			# Find the perimeter of cnt, closed loop contour. And its area
+			perimeter_cnt = cv.arcLength(cnt, True)
+			area_cnt = cv.contourArea(cnt)
+
+			# Find max deviation from contour allowed to occur for approx.
+			epsilon = 0.03 * perimeter_cnt
+
+			# Finds a contour for cnt, epsilon fitting factor and closed
+			approx_cnt = cv.approxPolyDP(cnt, epsilon, True)
+
+			# If quadrilateral shape and its area is > than current max area
+			if len(approx_cnt) == 4 and area_cnt > max_cnt:
+
+				# Find x, y (top left box coords) and w, h (width and height) 
+				# of the bounding box. Calculate aspect ratio.
+				x, y, w, h = cv.boundingRect(max_cnt)
+				aspect_ratio = float(w)/h
+
+				# If aspect ratio is ~= 1 then its a square (gate) therefore
+				# store it as the current largest contour
+				if aspect_ratio >= 0.90 and aspect_ratio <= 1.1:
+					max_cnt = cnt
+
+		# Find the biggest contour from contours array based on area
+		# max_cnt = max(contours, key = cv.contourArea)
+
+
 
 		# Draw contours on img, biggest one, all of them, color, thickness
 		cv.drawContours(img, max_cnt, -1, (0, 255, 0), 2)
 
-		# Find x, y (top left box coords) and w, h (width and height) of the bounding
-		# box. Plot rectangle, coords, color, thickness
-		x, y, w, h = cv.boundingRect(max_cnt)
+		# Plot rectangle, coords, color, thickness
 		cv.rectangle(img, (x,y), (x+w, y+h), (0, 255, 255), 1)
 
 		# Compute the centre of the bounding box and plot (on img, using centre
