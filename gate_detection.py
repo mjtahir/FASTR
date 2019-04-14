@@ -38,14 +38,14 @@ while True:
 	# Combine the masks
 	mask_hsv = mask_hsv1 + mask_hsv2
 
-	# Find the contours in the HSV mask
+	# Find the contours in the HSV mask. NOTE: this modifies mask_hsv
 	contours, _ = cv.findContours(mask_hsv, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
 
 	# If at least 1 contour found
 	if len(contours) != 0:
 
 		# Define max area contour and loop through each contour
-		max_cnt = 0
+		max_cnt = 5
 		for cnt in contours:
 
 			# Find the perimeter of cnt, closed loop contour. And its area
@@ -63,29 +63,29 @@ while True:
 
 				# Find x, y (top left box coords) and w, h (width and height) 
 				# of the bounding box. Calculate aspect ratio.
-				x, y, w, h = cv.boundingRect(max_cnt)
-				aspect_ratio = float(w)/h
+				x, y, w, h = cv.boundingRect(cnt)
+				aspect_ratio = float(w) / h
 
 				# If aspect ratio is ~= 1 then its a square (gate) therefore
 				# store it as the current largest contour
 				if aspect_ratio >= 0.90 and aspect_ratio <= 1.1:
-					max_cnt = cnt
+					max_cnt = area_cnt
+					drawn_cnt = cnt
 
 		# Find the biggest contour from contours array based on area
 		# max_cnt = max(contours, key = cv.contourArea)
 
+		if max_cnt != 5:
+			# Draw contours on img, biggest one, all of them, color, thickness
+			cv.drawContours(img, drawn_cnt, -1, (0, 255, 0), 2)
+		
+			# Plot rectangle, coords, color, thickness
+			cv.rectangle(img, (x,y), (x+w, y+h), (0, 255, 255), 1)
 
-
-		# Draw contours on img, biggest one, all of them, color, thickness
-		cv.drawContours(img, max_cnt, -1, (0, 255, 0), 2)
-
-		# Plot rectangle, coords, color, thickness
-		cv.rectangle(img, (x,y), (x+w, y+h), (0, 255, 255), 1)
-
-		# Compute the centre of the bounding box and plot (on img, using centre
-		# coords, radius, color, filled)
-		centre = (int(x + w/2), int(y + h/2))
-		cv.circle(img, centre, 5, (255, 255, 255), -1)
+			# Compute the centre of the bounding box and plot (on img, using centre
+			# coords, radius, color, filled)
+			centre = (int(x + w/2), int(y + h/2))
+			cv.circle(img, centre, 5, (255, 255, 255), -1)
 
 		# Compute distance from centre of image to centre of box
 
@@ -94,6 +94,7 @@ while True:
 	#cv.imshow("Source", src)
 	#cv.imshow("Blurred", blur)
 	cv.imshow("Frame", img)
+	#cv.imshow("Mask HSV", mask_hsv)
 
 	#cv.waitKey(0)
 	if cv.waitKey(1) & 0xFF == ord('q'):
