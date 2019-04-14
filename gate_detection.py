@@ -1,11 +1,19 @@
 import cv2 as cv
 import numpy as np
+import argparse
 
 # Read an image and create a copy
 #src = cv.imread('red_gate.jpg', 1)
 #img = np.copy(src)
 
-vid = cv.VideoCapture(0)
+parser = argparse.ArgumentParser(description='Run video, image or webcam.')
+parser.add_argument('-v', '--video', help="Path to the (optional) video file.")
+args = parser.parse_args()
+
+if not args.video:
+	vid = cv.VideoCapture(0)
+else:
+	vid = cv.VideoCapture(args.video)
 
 # Loop through each frame
 while True:
