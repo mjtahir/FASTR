@@ -45,7 +45,7 @@ while True:
 	if len(contours) != 0:
 
 		# Define max area contour and loop through each contour
-		max_cnt = 5
+		max_cnt = 10
 		for cnt in contours:
 
 			# Find the perimeter of cnt, closed loop contour. And its area
@@ -75,7 +75,7 @@ while True:
 		# Find the biggest contour from contours array based on area
 		# max_cnt = max(contours, key = cv.contourArea)
 
-		if max_cnt != 5:
+		if max_cnt != 10:
 			# Draw contours on img, biggest one, all of them, color, thickness
 			cv.drawContours(img, drawn_cnt, -1, (0, 255, 0), 2)
 		
