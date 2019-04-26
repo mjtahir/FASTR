@@ -6,7 +6,7 @@ import numpy as np
 import argparse
 from timeit import default_timer as timer
 import cProfile
-#from pose_estimation import simpleDistCalibration
+from pose_estimation import simpleDistCalibration, simpleDist
 
 def colourSegmentation(img):
 
@@ -89,14 +89,28 @@ def colourSegmentation(img):
 				
 		# Compute distance from centre of image to centre of box
 
-	#cv.namedWindow("Frame", cv.WINDOW_NORMAL)
-	#cv.resizeWindow("Frame", 640, 360)
-	cv.imshow("Frame", img)
 	#cv.imshow("Source", src)
-	#cv.imshow("Blurred", blur)
-	#cv.imshow("Mask HSV", mask_hsv)
+	return img, blur, mask_hsv, w
 
-	return w
+
+def plotFrame(frame, blur, mask_hsv, distance):
+
+	frame_plot = True
+	blur_plot = False
+	mask_hsv_plot = False
+
+	if frame_plot is True:
+		cv.namedWindow("Frame", cv.WINDOW_NORMAL)
+		cv.resizeWindow("Frame", 640, 360)
+		text = 'Distance: {} cm'.format(distance)
+		cv.putText(frame, text, (0, 235), cv.FONT_HERSHEY_PLAIN, 1,(255,255,255),2)
+		cv.imshow("Frame", frame)
+	
+	if blur_plot is True:
+		cv.imshow("Blurred", blur)
+
+	if mask_hsv_plot is True:
+		cv.imshow("Mask HSV", mask_hsv)
 
 ################################################################################
 
@@ -119,24 +133,25 @@ if __name__ == "__main__":
 	else:
 		vid = cv.VideoCapture(args.video)	# video
 
-	# cali_image = cv.imread('Images/cali_100cm.png', 1)
-	# focal_length = simpleDistCalibration(cali_image, 52, 100)
-	# print(focal_length)
+	cali_image = cv.imread('Images/cali_100cm.png', 1)
+	focal_length = simpleDistCalibration(cali_image, 52, 100)
+	print(focal_length)
 	start = timer()
 	while True:
 		
 		# ret (return) is true if img successfully found otherwise false.
 		# Type is tuple.
-		ret, img = vid.read()
-
+		_, src_img = vid.read()
+		
 		# Terminates video if img is empty (e.g. end of video file)
-		if img is None:
+		if src_img is None:
 			break
 
-		w = colourSegmentation(img)
+		img, blur, mask_hsv, w = colourSegmentation(src_img)
 		
-		#distance = simpleDist()
-		#plot()
+		distance = simpleDist(focal_length, 52, w)
+		#print(distance)
+		plotFrame(img, blur, mask_hsv, distance)
 
 		# Set to waitKey(33) for nearly 30 fps
 		if cv.waitKey(1) & 0xFF == ord('q'):
