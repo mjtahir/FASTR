@@ -15,7 +15,7 @@ def colourSegmentation(img):
 
 	# Resize image to reduce resolution for quicker processing
 	# Blur the image to reduce noise then convert to HSV colour space
-	img = cv.resize(img, (426, 240), interpolation = cv.INTER_NEAREST)
+	img = cv.resize(img, (426, 240), interpolation=cv.INTER_NEAREST)
 	blur = cv.GaussianBlur(img, (5, 5), 0)
 	hsv = cv.cvtColor(blur, cv.COLOR_BGR2HSV)
 
@@ -36,7 +36,7 @@ def colourSegmentation(img):
 	contours, _ = cv.findContours(mask_hsv, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
 	
 	# Sort contours from largest to smallest based on area
-	contours = sorted(contours, key = cv.contourArea, reverse = True)[:5]
+	contours = sorted(contours, key=cv.contourArea, reverse=True)[:5]
 		
 	# Define min area for contour and loop through each contour.
 	# If no contours found, then the loop will not start
