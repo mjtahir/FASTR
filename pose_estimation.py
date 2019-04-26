@@ -7,7 +7,7 @@ def simpleDistCalibration(img, GATE_WIDTH, DISTANCE_TO_GATE):
 	from gate_detection import colourSegmentation
 
 	# Width of the gate from colourSegmentation function
-	PIXEL_WIDTH = colourSegmentation(img)
+	_, _, _, PIXEL_WIDTH = colourSegmentation(img)
 	
 	assert (PIXEL_WIDTH is not None), "colourSegmentation() returned pixel width \
 		of {}".format(PIXEL_WIDTH)
@@ -17,7 +17,7 @@ def simpleDistCalibration(img, GATE_WIDTH, DISTANCE_TO_GATE):
 	return FOCAL_LENGTH_PER_PIXEL
 
 
-def simpleDist(FOCAL_LENGTH_PER_PIXEL, GATE_WIDTH):
+def simpleDist(FOCAL_LENGTH_PER_PIXEL, GATE_WIDTH, pixel_width):
 	# Calibration image: name.png
 	# Distance to gate = 100 cm
 	# Width of gate = 52 cm
@@ -25,6 +25,9 @@ def simpleDist(FOCAL_LENGTH_PER_PIXEL, GATE_WIDTH):
 	# measure 1: 324 cm
 	# measure 2: 201 cm
 
+
 	# Calculate distance to the gate
-	distance = GATE_WIDTH * FOCAL_LENGTH_PER_PIXEL / pixel_width
-	return distance
+	try:
+		return GATE_WIDTH * FOCAL_LENGTH_PER_PIXEL / pixel_width
+	except:
+		return None
