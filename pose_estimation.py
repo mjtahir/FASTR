@@ -27,7 +27,7 @@ def simpleDist(FOCAL_LENGTH_PER_PIXEL, GATE_WIDTH, pixel_width):
 
 
 	# Calculate distance to the gate
-	try:
+	if pixel_width is not None:
 		return GATE_WIDTH * FOCAL_LENGTH_PER_PIXEL / pixel_width
-	except:
+	else:
 		return None
