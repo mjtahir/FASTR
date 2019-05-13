@@ -2,20 +2,16 @@
 import cv2 as cv
 import numpy as np
 
-# Supplementary:
-import argparse
-from timeit import default_timer as timer
-import cProfile
-from pose_estimation import simpleDistCalibration, simpleDist
-
 def colourSegmentation(img):
 
 	# Initialise variables
 	w = None
+	offset = None
 
 	# Resize image to reduce resolution for quicker processing
 	# Blur the image to reduce noise then convert to HSV colour space
 	img = cv.resize(img, (426, 240), interpolation=cv.INTER_NEAREST)
+	img_centre = np.array([int(426/2), int(240/2)])
 	blur = cv.GaussianBlur(img, (5, 5), 0)
 	hsv = cv.cvtColor(blur, cv.COLOR_BGR2HSV)
 
@@ -81,16 +77,19 @@ def colourSegmentation(img):
 
 				# Compute the centre of the bounding box and plot (on img, 
 				# using centre coords, radius, color, filled)
-				centre = (int(x + w/2), int(y + h/2))
-				cv.circle(img, centre, 5, (255, 255, 255), -1)
+				centre = np.array([int(x + w/2), int(y + h/2)])
+				cv.circle(img, tuple(centre), 5, (255, 255, 255), -1)
+
+				# Find horizontal and vertical distance from centre of frame to
+				# centre of bounding box
+				offset = centre - img_centre
+				cv.arrowedLine(img, tuple(img_centre), (tuple(centre)[0], tuple(img_centre)[1]), (255, 255, 255))
+				cv.arrowedLine(img, tuple(img_centre), (tuple(img_centre)[0], tuple(centre)[1]), (255, 255, 255))
 
 				# Largest cnt meeting requirements found therefore break
 				break
-				
-		# Compute distance from centre of image to centre of box
 
-	#cv.imshow("Source", src)
-	return img, blur, mask_hsv, w
+	return (img, blur, mask_hsv, w)
 
 
 def plotFrame(frame, blur, mask_hsv, distance):
@@ -100,10 +99,17 @@ def plotFrame(frame, blur, mask_hsv, distance):
 	mask_hsv_plot = False
 
 	if frame_plot is True:
+		# Text on frame. frame, text, bottom-left position, font, font size,
+		# colour, thickness.
+		if distance is not None:
+			text = 'Distance: {:.4g} cm'.format(distance)
+			cv.putText(frame, text, (0, 235), cv.FONT_HERSHEY_PLAIN, 1, 
+				(255,255,255), 1)
+			#cv.line(frame, )
+
+
 		cv.namedWindow("Frame", cv.WINDOW_NORMAL)
 		cv.resizeWindow("Frame", 640, 360)
-		text = 'Distance: {} cm'.format(distance)
-		cv.putText(frame, text, (0, 235), cv.FONT_HERSHEY_PLAIN, 1,(255,255,255),2)
 		cv.imshow("Frame", frame)
 	
 	if blur_plot is True:
@@ -116,26 +122,42 @@ def plotFrame(frame, blur, mask_hsv, distance):
 
 if __name__ == "__main__":
 
-
+	import argparse
+	from timeit import default_timer as timer
+	import cProfile
+	from pose_estimation import simpleDistCalibration, simpleDist
+	
 	# Read an image and create a copy
 	# src = cv.imread('Images/cali_100cm.png', 1)
 	# img = np.copy(src)
 
-	# Parse arguments to allow for video file input from terminal
+	# Parse arguments to allow for video & image file input from terminal
 	# format: python3 [filename].py --video [video_file_name].mp4
 	parser = argparse.ArgumentParser(description='Run video, image or webcam.')
 	parser.add_argument('-v', '--video', help="Path to the (optional) video file.")
+	parser.add_argument('-i', '--image', help="Path to the (optional) image file.")
 	args = parser.parse_args()
 
-	# Use webcam if no video file input else use the video
-	if not args.video:
-		vid = cv.VideoCapture(0)	# webcam
-	else:
-		vid = cv.VideoCapture(args.video)	# video
-
+	# Find focal length per pixel using the calibration image
 	cali_image = cv.imread('Images/cali_100cm.png', 1)
 	focal_length = simpleDistCalibration(cali_image, 52, 100)
-	print(focal_length)
+
+	# If video present use that, otherwise try image, else use webcam
+	if args.video:
+		vid = cv.VideoCapture(args.video)	# video file
+	elif args.image:
+		# Read the image, segment it, find distance and plot
+		image = cv.imread(args.image, 1)
+		img, blur, mask_hsv, w = colourSegmentation(image)
+		distance = simpleDist(focal_length, 52, w)
+		plotFrame(img, blur, mask_hsv, distance)
+		cv.waitKey(0)
+
+		# Since image has been analysed, no need for rest of code
+		raise SystemExit(0)
+	else:
+		vid = cv.VideoCapture(0)	# webcam
+
 	start = timer()
 	while True:
 		
@@ -147,17 +169,16 @@ if __name__ == "__main__":
 		if src_img is None:
 			break
 
+		# Find the gate, then its distance then plot
 		img, blur, mask_hsv, w = colourSegmentation(src_img)
-		
 		distance = simpleDist(focal_length, 52, w)
-		#print(distance)
 		plotFrame(img, blur, mask_hsv, distance)
 
 		# Set to waitKey(33) for nearly 30 fps
 		if cv.waitKey(1) & 0xFF == ord('q'):
 			break
-
 	end = timer()
 	print('Time: ', end - start)
+
 	vid.release()
 	cv.destroyAllWindows()
