@@ -5,7 +5,10 @@ import numpy as np
 def colourSegmentation(img):
 
 	# Initialise variables
+	x = None
+	y = None
 	w = None
+	h = None
 	offset = None
 
 	# Resize image to reduce resolution for quicker processing
@@ -83,13 +86,16 @@ def colourSegmentation(img):
 				# Find horizontal and vertical distance from centre of frame to
 				# centre of bounding box
 				offset = centre - img_centre
-				cv.arrowedLine(img, tuple(img_centre), (tuple(centre)[0], tuple(img_centre)[1]), (255, 255, 255))
-				cv.arrowedLine(img, tuple(img_centre), (tuple(img_centre)[0], tuple(centre)[1]), (255, 255, 255))
+				cv.arrowedLine(img, tuple(img_centre), (tuple(centre)[0], 
+					tuple(img_centre)[1]), (255, 255, 255))
+				cv.arrowedLine(img, tuple(img_centre), (tuple(img_centre)[0], 
+					tuple(centre)[1]), (255, 255, 255))
 
 				# Largest cnt meeting requirements found therefore break
 				break
 
-	return (img, blur, mask_hsv, w)
+	# return (img, blur, mask_hsv, w, offset)
+	return (img, blur, mask_hsv), (x, y, w, h, offset)
 
 
 def plotFrame(frame, blur, mask_hsv, distance):
@@ -148,7 +154,11 @@ if __name__ == "__main__":
 	elif args.image:
 		# Read the image, segment it, find distance and plot
 		image = cv.imread(args.image, 1)
-		img, blur, mask_hsv, w = colourSegmentation(image)
+		#img, blur, mask_hsv, w = colourSegmentation(image)
+		cs_frames, cs_coords = colourSegmentation(image)
+		img, blur, mask_hsv = cs_frames
+		_, _, w, _, _ = cs_coords
+
 		distance = simpleDist(focal_length, 52, w)
 		plotFrame(img, blur, mask_hsv, distance)
 		cv.waitKey(0)
@@ -170,13 +180,22 @@ if __name__ == "__main__":
 			break
 
 		# Find the gate, then its distance then plot
-		img, blur, mask_hsv, w = colourSegmentation(src_img)
+		#img, blur, mask_hsv, w, offset = colourSegmentation(src_img)
+		cs_frames, cs_coords = colourSegmentation(src_img)
+		img, blur, mask_hsv = cs_frames
+		_, _, w, _, offset = cs_coords
 		distance = simpleDist(focal_length, 52, w)
 		plotFrame(img, blur, mask_hsv, distance)
 
 		# Set to waitKey(33) for nearly 30 fps
 		if cv.waitKey(1) & 0xFF == ord('q'):
 			break
+
+		# if cv.waitKey(1) & 0xff == ord('s'):
+		# 	cv.imwrite('screenshotFrame.png',img)
+		# 	cv.imwrite('screenshotMask.png',mask_hsv)
+		# 	break
+
 	end = timer()
 	print('Time: ', end - start)
 
