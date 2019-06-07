@@ -1,4 +1,3 @@
-
 def simpleDistCalibration(img, GATE_WIDTH, DISTANCE_TO_GATE):
 	'''
 	The calibration image is assumed to contain a detectable gate which is upright
@@ -7,7 +6,9 @@ def simpleDistCalibration(img, GATE_WIDTH, DISTANCE_TO_GATE):
 	from gate_detection import colourSegmentation
 
 	# Width of the gate from colourSegmentation function
-	_, _, _, PIXEL_WIDTH = colourSegmentation(img)
+	#_, _, _, PIXEL_WIDTH, _ = colourSegmentation(img)
+	_, cs_coords = colourSegmentation(img)
+	_, _, PIXEL_WIDTH, _, _ = cs_coords
 	
 	assert (PIXEL_WIDTH is not None), "colourSegmentation() returned pixel width \
 		of {}".format(PIXEL_WIDTH)
