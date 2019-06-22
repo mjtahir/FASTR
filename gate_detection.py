@@ -2,7 +2,7 @@
 import cv2 as cv
 import numpy as np
 
-def colourSegmentation(img):
+def colourSegmentation(img, down_resolution=(480,360)):
 
 	# Initialise variables
 	x = None
@@ -13,8 +13,9 @@ def colourSegmentation(img):
 
 	# Resize image to reduce resolution for quicker processing
 	# Blur the image to reduce noise then convert to HSV colour space
-	img = cv.resize(img, (426, 240), interpolation=cv.INTER_NEAREST)
-	img_centre = np.array([int(426/2), int(240/2)])
+	img = cv.resize(img, down_resolution, interpolation=cv.INTER_NEAREST)
+	img_shape = img.shape[:2]	# (rows, cols)
+	img_centre = np.array([int(img_shape[1]/2), int(img_shape[0]/2)])
 	blur = cv.GaussianBlur(img, (5, 5), 0)
 	hsv = cv.cvtColor(blur, cv.COLOR_BGR2HSV)
 
@@ -39,7 +40,7 @@ def colourSegmentation(img):
 		
 	# Define min area for contour and loop through each contour.
 	# If no contours found, then the loop will not start
-	cnt_area = 20
+	cnt_area = 1000
 	for cnt in contours:
 		
 		# Find current contour's area
@@ -73,7 +74,7 @@ def colourSegmentation(img):
 				cnt_area = area_cnt
 		
 				# Draw contours on img, biggest one, all of them, color, thickness
-				cv.drawContours(img, cnt, -1, (0, 255, 0), 2)
+				cv.drawContours(img, cnt, -1, (0, 255, 0), 3)
 			
 				# Plot rectangle, coords, color, thickness
 				cv.rectangle(img, (x, y), (x+w, y+h), (0, 255, 255), 1)
@@ -94,7 +95,6 @@ def colourSegmentation(img):
 				# Largest cnt meeting requirements found therefore break
 				break
 
-	# return (img, blur, mask_hsv, w, offset)
 	return (img, blur, mask_hsv), (x, y, w, h, offset)
 
 
@@ -113,9 +113,8 @@ def plotFrame(frame, blur, mask_hsv, distance):
 				(255,255,255), 1)
 			#cv.line(frame, )
 
-
 		cv.namedWindow("Frame", cv.WINDOW_NORMAL)
-		cv.resizeWindow("Frame", 640, 360)
+		#cv.resizeWindow("Frame", 480, 360)
 		cv.imshow("Frame", frame)
 	
 	if blur_plot is True:
@@ -146,7 +145,7 @@ if __name__ == "__main__":
 
 	# Find focal length per pixel using the calibration image
 	cali_image = cv.imread('Images/cali_100cm.png', 1)
-	focal_length = simpleDistCalibration(cali_image, 52, 100)
+	focal_length = simpleDistCalibration(cali_image, 50, 100)
 
 	# If video present use that, otherwise try image, else use webcam
 	if args.video:
@@ -154,12 +153,11 @@ if __name__ == "__main__":
 	elif args.image:
 		# Read the image, segment it, find distance and plot
 		image = cv.imread(args.image, 1)
-		#img, blur, mask_hsv, w = colourSegmentation(image)
 		cs_frames, cs_coords = colourSegmentation(image)
 		img, blur, mask_hsv = cs_frames
 		_, _, w, _, _ = cs_coords
 
-		distance = simpleDist(focal_length, 52, w)
+		distance = simpleDist(focal_length, 50, w)
 		plotFrame(img, blur, mask_hsv, distance)
 		cv.waitKey(0)
 
@@ -184,7 +182,7 @@ if __name__ == "__main__":
 		cs_frames, cs_coords = colourSegmentation(src_img)
 		img, blur, mask_hsv = cs_frames
 		_, _, w, _, offset = cs_coords
-		distance = simpleDist(focal_length, 52, w)
+		distance = simpleDist(focal_length, 50, w)
 		plotFrame(img, blur, mask_hsv, distance)
 
 		# Set to waitKey(33) for nearly 30 fps
