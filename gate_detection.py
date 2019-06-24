@@ -1,4 +1,3 @@
-# Core modules:
 import cv2 as cv
 import numpy as np
 
@@ -34,15 +33,15 @@ def colourSegmentation(img, down_resolution=(480,360)):
 	# Find the contours in the HSV mask. RETR_LIST does not compute heirachy
 	# APPROX_SIMPLE saves memory by reducing number of points on straight line
 	contours, _ = cv.findContours(mask_hsv, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
-	
+
 	# Sort contours from largest to smallest based on area
 	contours = sorted(contours, key=cv.contourArea, reverse=True)[:5]
-		
+
 	# Define min area for contour and loop through each contour.
 	# If no contours found, then the loop will not start
 	cnt_area = 1000
 	for cnt in contours:
-		
+
 		# Find current contour's area
 		area_cnt = cv.contourArea(cnt)
 
@@ -51,7 +50,7 @@ def colourSegmentation(img, down_resolution=(480,360)):
 
 			# Find the perimeter of cnt, closed loop contour.
 			perimeter_cnt = cv.arcLength(cnt, True)
-			
+
 			# Find max deviation from contour allowed to occur for approx.
 			# Smaller number defines stricter error requirement
 			epsilon = 0.015 * perimeter_cnt
@@ -71,11 +70,11 @@ def colourSegmentation(img, down_resolution=(480,360)):
 				# If aspect ratio is ~= 1 then its a square (gate) therefore
 				# store it as the current largest contour
 				#if aspect_ratio >= 0.90 and aspect_ratio <= 1.1:
-				cnt_area = area_cnt
-		
+				cnt_area = area_cnt		# <-- not needed
+
 				# Draw contours on img, biggest one, all of them, color, thickness
 				cv.drawContours(img, cnt, -1, (0, 255, 0), 3)
-			
+
 				# Plot rectangle, coords, color, thickness
 				cv.rectangle(img, (x, y), (x+w, y+h), (0, 255, 255), 1)
 
@@ -128,10 +127,11 @@ def plotFrame(frame, blur, mask_hsv, distance):
 if __name__ == "__main__":
 
 	import argparse
-	from timeit import default_timer as timer
 	import cProfile
+	from timeit import default_timer as timer
 	from pose_estimation import simpleDistCalibration, simpleDist
-	
+	import config
+
 	# Read an image and create a copy
 	# src = cv.imread('Images/cali_100cm.png', 1)
 	# img = np.copy(src)
@@ -145,7 +145,7 @@ if __name__ == "__main__":
 
 	# Find focal length per pixel using the calibration image
 	cali_image = cv.imread('Images/cali_100cm.png', 1)
-	focal_length = simpleDistCalibration(cali_image, 50, 100)
+	focal_length = simpleDistCalibration(cali_image, config.GATE_WIDTH, 100)
 
 	# If video present use that, otherwise try image, else use webcam
 	if args.video:
@@ -157,7 +157,7 @@ if __name__ == "__main__":
 		img, blur, mask_hsv = cs_frames
 		_, _, w, _, _ = cs_coords
 
-		distance = simpleDist(focal_length, 50, w)
+		distance = simpleDist(focal_length, config.GATE_WIDTH, w)
 		plotFrame(img, blur, mask_hsv, distance)
 		cv.waitKey(0)
 
@@ -168,21 +168,20 @@ if __name__ == "__main__":
 
 	start = timer()
 	while True:
-		
+
 		# ret (return) is true if img successfully found otherwise false.
 		# Type is tuple.
 		_, src_img = vid.read()
-		
+
 		# Terminates video if img is empty (e.g. end of video file)
 		if src_img is None:
 			break
 
 		# Find the gate, then its distance then plot
-		#img, blur, mask_hsv, w, offset = colourSegmentation(src_img)
 		cs_frames, cs_coords = colourSegmentation(src_img)
 		img, blur, mask_hsv = cs_frames
 		_, _, w, _, offset = cs_coords
-		distance = simpleDist(focal_length, 50, w)
+		distance = simpleDist(focal_length, config.GATE_WIDTH, w)
 		plotFrame(img, blur, mask_hsv, distance)
 
 		# Set to waitKey(33) for nearly 30 fps
