@@ -62,8 +62,8 @@ def colourSegmentation(img, down_resolution=(480,360)):
 			# If quadrilateral shape
 			if len(approx_cnt) == 4:
 
-				# Find x, y (top left box coords) and w, h (width and height) 
-				# of the bounding box. Calculate aspect ratio.
+				# Find x, y (top left point) and w, h (width and height) 
+				# of the bounding rect. Calculate aspect ratio.
 				x, y, w, h = cv.boundingRect(cnt)
 				aspect_ratio = float(w) / h
 
@@ -78,14 +78,15 @@ def colourSegmentation(img, down_resolution=(480,360)):
 				# Plot rectangle, coords, color, thickness
 				cv.rectangle(img, (x, y), (x+w, y+h), (0, 255, 255), 1)
 
-				# Compute the centre of the bounding box and plot (on img, 
+				# Compute the centre of the bounding rect and plot (on img, 
 				# using centre coords, radius, color, filled)
 				centre = np.array([int(x + w/2), int(y + h/2)])
 				cv.circle(img, tuple(centre), 5, (255, 255, 255), -1)
 
 				# Find horizontal and vertical distance from centre of frame to
-				# centre of bounding box
-				offset = centre - img_centre
+				# centre of bounding rect. The [-1, 1] corrects coordinates to
+				# align camera rotation with aircraft coordinates.
+				offset = (centre - img_centre) * np.array([-1, 1])
 				cv.arrowedLine(img, tuple(img_centre), (tuple(centre)[0], 
 					tuple(img_centre)[1]), (255, 255, 255))
 				cv.arrowedLine(img, tuple(img_centre), (tuple(img_centre)[0], 
@@ -103,23 +104,22 @@ def plotFrame(frame, blur, mask_hsv, distance):
 	blur_plot = False
 	mask_hsv_plot = False
 
-	if frame_plot is True:
+	if frame_plot:
 		# Text on frame. frame, text, bottom-left position, font, font size,
 		# colour, thickness.
 		if distance is not None:
 			text = 'Distance: {:.4g} cm'.format(distance)
 			cv.putText(frame, text, (0, 235), cv.FONT_HERSHEY_PLAIN, 1, 
 				(255,255,255), 1)
-			#cv.line(frame, )
 
 		cv.namedWindow("Frame", cv.WINDOW_NORMAL)
-		#cv.resizeWindow("Frame", 480, 360)
+		cv.resizeWindow("Frame", 480, 360)
 		cv.imshow("Frame", frame)
-	
-	if blur_plot is True:
+
+	if blur_plot:
 		cv.imshow("Blurred", blur)
 
-	if mask_hsv_plot is True:
+	if mask_hsv_plot:
 		cv.imshow("Mask HSV", mask_hsv)
 
 ################################################################################
