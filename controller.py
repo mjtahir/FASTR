@@ -21,7 +21,11 @@ def run(w, h, offset, dist_to_gate, dt, tello):
 
 		#tello.rc(lr=int(epsilon_x * 180/np.pi)*4)
 		#tello.rc(ud=-int(epsilon_y * 180/np.pi)*4)
-		error = offset_angle * 180/np.pi
+
+		# Reference for horizontal, vertical and distance
+		reference = np.array([0, 0, 250])
+		signal = np.concatenate((offset_angle * 180/np.pi, [dist_to_gate]))
+		error = signal - reference
 		try:
 			PID(error, run.prev_error, dt, tello)
 		except AttributeError:
@@ -41,7 +45,7 @@ def PID(error, prev_error, dt, tello):
 	try:
 		PID.integral += error * dt
 	except AttributeError:
-		PID.integral = np.zeros(2)
+		PID.integral = np.zeros(3)
 		print('PID integral initialised = [0,0]')
 
 	# Numerical differentiation - first order difference scheme
@@ -62,6 +66,4 @@ def PID(error, prev_error, dt, tello):
 	pid_input = np.where(pid_input < -100, -100, pid_input)
 
 	# Controller inputs to tello (check sign)
-	tello.rc(lr=int(pid_input[0]), ud=int(pid_input[1]))
-
-	#test, out of batteries
+	tello.rc(lr=int(pid_input[0]), ud=int(pid_input[1]), fb=-int(0.25*pid_input[2]))
