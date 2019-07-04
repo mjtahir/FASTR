@@ -1,5 +1,7 @@
 import cv2 as cv
 import numpy as np
+from scipy.signal import find_peaks
+import matplotlib.pyplot as plt
 
 def colourSegmentation(img, down_resolution=(480,360)):
 
@@ -14,7 +16,7 @@ def colourSegmentation(img, down_resolution=(480,360)):
 	# Blur the image to reduce noise then convert to HSV colour space
 	img = cv.resize(img, down_resolution, interpolation=cv.INTER_NEAREST)
 	img_shape = img.shape[:2]	# (rows, cols)
-	img_centre = np.array([int(img_shape[1]/2), int(img_shape[0]/2)])
+	img_centre = np.array([int(img_shape[1]/2), int(img_shape[0]/2)]) # (x, y)
 	blur = cv.GaussianBlur(img, (5, 5), 0)
 	hsv = cv.cvtColor(blur, cv.COLOR_BGR2HSV)
 
@@ -27,7 +29,7 @@ def colourSegmentation(img, down_resolution=(480,360)):
 	red_upper = np.array([180, 255, 255])
 	mask_hsv2 = cv.inRange(hsv, red_lower, red_upper)
 
-	# Combine the masks
+	# Combine the masks. Outputs 0 or 255.
 	mask_hsv = mask_hsv1 + mask_hsv2
 
 	# Find the contours in the HSV mask. RETR_LIST does not compute heirachy
@@ -98,6 +100,82 @@ def colourSegmentation(img, down_resolution=(480,360)):
 	return (img, blur, mask_hsv), (x, y, w, h, offset)
 
 
+def gateEdgeDetector(frame, binary_mask):
+
+	hori_offset = None
+	width = None
+	num_of_edges = 0
+
+	# Sum each column of the mask and form a single row vector.
+	# (image, column-wise, sum, datatype)
+	column_sum = cv.reduce(binary_mask, 0, cv.REDUCE_SUM, dtype=cv.CV_32S)
+	column_sum = np.ravel(column_sum)	# Change to 1D array
+
+	img_shape = frame.shape[:2]	# (rows, cols)
+	img_centre = np.array([int(img_shape[1]/2), int(img_shape[0]/2)]) # (x, y)
+	max_height = img_shape[0] * 255
+
+	# Find peaks of the row vector with min height and distance requirements
+	peaks, properties = find_peaks(column_sum, height=0.2*max_height,
+		distance=0.15*img_shape[1])
+
+	if len(peaks) > 2:
+
+		# Sort all detected peak heights in descending order (with their index)
+		peak_heights = properties['peak_heights']
+		sort_index = peak_heights.argsort()[::-1]
+
+		# Starting from the highest peak, compare its height to the 2nd highest
+		# and use these two peaks if their heights are similar
+		for i in range(len(peaks) - 1):
+			if (peak_heights[sort_index[i]] - peak_heights[sort_index[i+1]]) <= 0.2*max_height:
+
+				# Similar heights therefore use peak i and i + 1
+				peaks = np.array([peaks[sort_index[i]], peaks[sort_index[i+1]]])
+
+				print('Breaking: ' + str(peaks))
+				break
+
+			# Last iteration, no suitable peaks therefore set to empty list
+			elif i == (len(peaks) - 2):
+				print('Too much height difference')
+				peaks = []
+
+	elif len(peaks) == 1:
+
+		# One peak detected hence only 1 edge of the gate is detected.
+		# This offset is with respect to the detected edge and not the centre
+		# of the gate since the centre cannot be determined with only 1 edge.
+		hori_offset = peaks - img_centre[0]
+		num_of_edges = 1
+
+	# If the original num of peaks was 2, or if more than 2 were found but
+	# reduced to 2 with the above if statement.
+	if len(peaks) == 2:
+		centre = (peaks[0] + peaks[1]) / 2
+
+		# Find horizontal offset and width. -1 corrects coordinates
+		hori_offset = (centre - img_centre[0]) * -1
+		width = abs(peaks[0] - peaks[1])
+		num_of_edges = 2
+
+	# Draw the peak columns on the frame
+	print("About to draw: " + str(peaks))
+	for column_index in peaks:
+		cv.rectangle(frame, (column_index, 0), (column_index, img_shape[1]), 
+			(255, 0, 0), 2)
+
+	# Live plot of the peaks, requires Matplotlib.pyplot.
+	# plt.plot(column_sum)
+	# plt.plot(peaks, column_sum[peaks], "x")
+	# plt.ylim(0, max_height)
+	# plt.pause(0.00001)
+	# plt.cla()
+
+	# num_of_edges returns 0, 1 or 2 (number of post-processed peaks)
+	return (hori_offset, width, num_of_edges)
+
+
 def plotFrame(frame, blur, mask_hsv, distance):
 
 	frame_plot = True
@@ -105,11 +183,11 @@ def plotFrame(frame, blur, mask_hsv, distance):
 	mask_hsv_plot = False
 
 	if frame_plot:
-		# Text on frame. frame, text, bottom-left position, font, font size,
-		# colour, thickness.
+		# Text on frame. (frame, text, bottom-left position, font, font size,
+		# colour, thickness)
 		if distance is not None:
 			text = 'Distance: {:.4g} cm'.format(distance)
-			cv.putText(frame, text, (0, 235), cv.FONT_HERSHEY_PLAIN, 1, 
+			cv.putText(frame, text, (0, 350), cv.FONT_HERSHEY_PLAIN, 1, 
 				(255,255,255), 1)
 
 		cv.namedWindow("Frame", cv.WINDOW_NORMAL)
@@ -129,6 +207,7 @@ if __name__ == "__main__":
 	import argparse
 	import cProfile
 	from timeit import default_timer as timer
+
 	from pose_estimation import simpleDistCalibration, simpleDist
 	import config
 
@@ -166,6 +245,7 @@ if __name__ == "__main__":
 	else:
 		vid = cv.VideoCapture(0)	# webcam
 
+	screenshot_count = 1
 	start = timer()
 	while True:
 
@@ -182,16 +262,20 @@ if __name__ == "__main__":
 		img, blur, mask_hsv = cs_frames
 		_, _, w, _, offset = cs_coords
 		distance = simpleDist(focal_length, config.GATE_WIDTH, w)
+
+		gateEdgeDetector(img, mask_hsv)
 		plotFrame(img, blur, mask_hsv, distance)
 
 		# Set to waitKey(33) for nearly 30 fps
-		if cv.waitKey(1) & 0xFF == ord('q'):
+		# Display frame and check for user input.
+		key = cv.waitKey(1) & 0xFF
+		if key == ord('q'):
 			break
 
-		# if cv.waitKey(1) & 0xff == ord('s'):
-		# 	cv.imwrite('screenshotFrame.png',img)
-		# 	cv.imwrite('screenshotMask.png',mask_hsv)
-		# 	break
+		elif key == ord('s'):
+			#cv.imwrite('screenshotFrame'+str(screenshot_count)+'.png', frame)
+			cv.imwrite('screenshotHSV'+str(screenshot_count)+'.png', mask_hsv)
+			screenshot_count += 1
 
 	end = timer()
 	print('Time: ', end - start)
