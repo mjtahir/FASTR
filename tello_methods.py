@@ -3,7 +3,6 @@ import threading
 import time
 import cv2 as cv
 # import libh264decoder
-# import numpy as np
 
 class Tello:
 	'''
@@ -32,7 +31,7 @@ class Tello:
 	camera_address = ('udp://@' + LOCAL_IP + ':' + str(VIDEO_PORT)) #'?overrun_nonfatal=1&fifo_size=5000'
 
 	def __init__(self):
-
+		'''Initialises the object, sockets and a response receiving thread.'''
 		# Initialise variables
 		self.response = None
 		self.cap = None		# Video object
@@ -57,7 +56,7 @@ class Tello:
 		#print('Sent: command')
 
 	def _udpReceive(self):
-		''' Method runs as a thread to constantly receive responses '''
+		'''Method runs as a thread to constantly receive responses.'''
 		while True:
 			try:
 				self.response, addr = self.socket_cmd.recvfrom(2048)
@@ -70,7 +69,7 @@ class Tello:
 		Initiates video capture by starting the Tello camera, finding the 
 		pointer to the video (VideoCapture) and starting the thread which reads
 		each frame
-		 '''
+		'''
 		self.sendCommandNoWait('streamon')
 		self.streamon = True
 
@@ -82,7 +81,7 @@ class Tello:
 		self.video_thread.start()
 
 	def _updateFrame(self):
-		''' Updates frame through a thread '''
+		'''Updates frame through a thread.'''
 		while self.streamon:
 			try:
 				self.ret, self.frame = self.cap.read()
@@ -90,11 +89,11 @@ class Tello:
 				print('Exception in _updateFrame:', exc)
 
 	def readFrame(self):
-		''' Returns latest frame to the calling object '''
+		'''Returns latest frame to the calling object.'''
 		return self.frame
 
 	def shutdown(self):
-		''' Shutdown procedure, stop video capture and close sockets '''
+		'''Shutdown procedure, stop video capture and close sockets.'''
 		if self.streamon:
 			self.stopVideoCapture()
 
@@ -102,7 +101,7 @@ class Tello:
 		self.socket_video.close()
 
 	def stopVideoCapture(self):
-
+		'''Stops video capture by sending "streamoff" command.'''
 		# if self.cap is not None:
 		# 	print('Releasing stream')
 		# 	self.cap.release()
@@ -119,21 +118,21 @@ class Tello:
 		time.sleep(Tello.command_timeout)
 
 	def sendCommandNoWait(self, command):
-		''' Sends utf8 encoded command to the Tello '''
+		'''Sends utf8 encoded command to the Tello with no waiting after.'''
 		print('--> Command sent:', command)
 		self.socket_cmd.sendto(command.encode('utf8'), Tello.TELLO_ADDRESS)
 
 	# Control Commands
 	def takeoff(self):
-		''' Sends takeoff command '''
+		'''Sends takeoff command.'''
 		return self.sendCommand('takeoff')
 
 	def land(self):
-		''' Sends land command '''
+		'''Sends land command.'''
 		return self.sendCommand('land')
 
 	def emergency(self):
-		''' Stops all motors immediately '''
+		'''Stops all motors immediately.'''
 		return self.sendCommand('emergency')
 
 	def move(self, direction, distance):
@@ -144,12 +143,12 @@ class Tello:
 		return self.sendCommand(direction + ' ' + str(distance))
 
 	def rotate(self, direction, degrees):
-		''' Rotates cw or ccw for a maximum of 3600 degrees '''
+		'''Rotates cw or ccw for a maximum of 3600 degrees.'''
 		return self.sendCommand(direction + ' ' + str(degrees))
 
 	# Set Commands
 	def setSpeed(self, speed):
-		''' Sets speed given in cm/s. Range from 10 - 100 cm/s '''
+		'''Sets speed given in cm/s. Range from 10 - 100 cm/s.'''
 		return self.sendCommand('speed ' + str(speed))
 
 	def rc(self, lr=0, fb=0, ud=0, yaw=0):
@@ -162,19 +161,19 @@ class Tello:
 
 	# Read Commands
 	def getSpeed(self):
-		''' Returns speed in cm/s '''
+		'''Returns speed in cm/s.'''
 		return self.sendCommand('speed?')
 
 	def getBattery(self):
-		''' Returns battery percentage '''
+		'''Returns battery percentage.'''
 		return self.sendCommand('battery?')
 
 	def getTime(self):
-		''' Returns flight time since turned on in seconds '''
+		'''Returns flight time since turned on in seconds.'''
 		return self.sendCommand('time?')
 
 	def getHeight(self):
-		''' 
+		'''
 		Returns height in dm (decimeter) from starting point 
 		This may be IMU based hence experiences drift. The return 
 		value is rounded to the nearest decimeter.
@@ -182,11 +181,11 @@ class Tello:
 		return self.sendCommand('height?')
 
 	def getTemp(self):
-		''' Returns temperature in Celcius '''
+		'''Returns temperature in Celcius.'''
 		return self.sendCommand('temp?')
 
 	def getAttitude(self):
-		''' 
+		'''
 		Returns IMU attitude of pitch, roll and yaw in degrees. 
 		Yaw is zeroed when Tello is turned on.
 		'''
@@ -196,14 +195,14 @@ class Tello:
 		'''
 		Returns barometer value (altitude) in metres.
 		Seems to fluctuate a fair amount
-		 '''
+		'''
 		return self.sendCommand('baro?')
 
 	def getAcceleration(self):
 		'''
 		Returns IMU acceleration in x, y and z directions in 
 		0.001g's. So 1000 = 1g.
-		 '''
+		'''
 		return self.sendCommand('acceleration?')
 
 	def getToF(self):
@@ -215,7 +214,7 @@ class Tello:
 		return self.sendCommand('tof?')
 
 	def getSNR(self):
-		''' Returns Signal to Noise Ratio of the WiFi link '''
+		'''Returns Signal to Noise Ratio of the WiFi link.'''
 		return self.sendCommand('wifi?')
 
 
