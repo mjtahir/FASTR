@@ -2,21 +2,25 @@ import cv2 as cv
 import time
 import numpy as np
 from timeit import default_timer as timer
+
+import config
 from tello_methods import Tello
 from pose_estimation import simpleDistCalibration, simpleDist
-import config
-from gate_detection import colourSegmentation, plotFrame
-from controller import run
+from gate_detection import colourSegmentation, gateEdgeDetector, plotFrame
+from controller import runPID, runEdgeCont
 
-# Instantiate a tello object and start video capture
+# Instantiate a tello object and setup
 tello = Tello()
 tello.getBattery()
 tello.startVideoCapture()
+tello.startStateCapture()
 tello.rc()	# reset controls to zereos
-tello.takeoff()
-time.sleep(8)
-tello.move('up',70)
-# time.sleep(3)
+
+fly = True
+if fly:
+	tello.takeoff()
+	time.sleep(8)
+	tello.move('up',20)
 
 screenshot_count = 1
 track_gate_user = False
@@ -25,60 +29,82 @@ controller_on_user = True
 # Find focal length per pixel using the calibration image
 cali_image = cv.imread('Images/cali_100cm.png', 1)
 focal_length = simpleDistCalibration(cali_image, config.GATE_WIDTH, 100)
-while True:
+try:
+	while True:
 
-	# Read latest frame from Tello method
-	frame = tello.readFrame()
+		# Read latest frame from Tello method
+		frame = tello.readFrame()
 
-	if track_gate_user:
-		# Find the gate and its distance then plot
-		cs_frames, cs_coords = colourSegmentation(frame)
-		img, blur, mask_hsv = cs_frames
-		_, _, w, h, offset = cs_coords
-		distance = simpleDist(focal_length, config.GATE_WIDTH, w)
+		if track_gate_user:
+			# Find the gate and its distance
+			cs_frames, cs_coords = colourSegmentation(frame)
+			img, blur, mask_hsv = cs_frames
+			_, _, cs_width, cs_height, cs_offset = cs_coords
+			width = cs_width
 
-		if controller_on_user:
-			end_time = timer()
+			# If colourSegmentation does not find gate
+			if cs_offset is None:
+				ed_offset, ed_width, num_of_edges = gateEdgeDetector(img, mask_hsv)
+				width = ed_width
+			
+			distance = simpleDist(focal_length, config.GATE_WIDTH, width)
+			plotFrame(img, blur, mask_hsv, distance)
+		else:
+			cv.imshow("Frame", frame)
+
+		end_time = timer()
+		if track_gate_user and controller_on_user:
 			try:
 				dt = end_time - start_time
 			except NameError:
 				dt = 0.005	# Approximate dt for first iteration
-			run(w, h, offset, distance, dt, tello)
-			start_time = timer()
 
-		plotFrame(img, blur, mask_hsv, distance)
-	else:
-		cv.imshow("Frame", frame)
+			if cs_offset is not None:
+				runPID(cs_width, cs_height, cs_offset, distance, dt, tello)
+			else:
+				runEdgeCont(ed_width, ed_offset, num_of_edges, distance, dt, tello)
+		start_time = timer()
 
-	# Display frame and check for user input. Note these user inputs only work
-	# if a frame is displayed and selected.
-	key = cv.waitKey(1) & 0xFF
-	if key == ord('q'):
-		tello.rc()
-		break
+		# Display frame and check for user input. Note these user inputs only work
+		# if a frame is displayed and selected.
+		key = cv.waitKey(1) & 0xFF
+		if key == ord('q'):
+			tello.rc()
+			break
 
-	elif key == ord('s'):
-		cv.imwrite('screenshotFrame'+str(screenshot_count)+'.png', frame)
-		screenshot_count += 1
+		elif key == ord('s'):
+			cv.imwrite('screenshotFrame'+str(screenshot_count)+'.png', frame)
+			screenshot_count += 1
 
-	elif key == ord('t'):
-		track_gate_user = not track_gate_user
+		elif key == ord('t'):
+			track_gate_user = not track_gate_user
+			tello.rc()
 
-	elif key == ord('c'):
-		controller_on_user = not controller_on_user
-		tello.rc()
+		elif key == ord('c'):
+			controller_on_user = not controller_on_user
+			tello.rc()
 
-	elif key == ord('m'):
-		tello.rc()
-		# Implement function dict
-		# https://stackoverflow.com/questions/12495218/using-user-input-to-call-functions
-		pass # manual tello command
+		elif key == ord('m'):
+			tello.rc()
+			# Implement function dict
+			# https://stackoverflow.com/questions/12495218/using-user-input-to-call-functions
+			pass # manual tello command
 
-tello.land()
-tello.shutdown()
-cv.destroyAllWindows()
+	tello.land()
+	tello.shutdown()
+	cv.destroyAllWindows()
 
-# implement user control into code, different key for controller on.
+# This except block executes when the main loop above crashes. The crash can
+# leave the tello with some control input leading it to crash and suffer damage.
+except Exception:
+	tello.rc()
+	print("Main loop crashed. Exception Handling")
+	raise
+
+# Measure camera offset angle <---
+# implement user control into code, 
+# dilation for gate detection, currently flickers <---
+# PnP
 
 #----------------------------------------------
 # tello.getBattery()
