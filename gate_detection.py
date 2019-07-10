@@ -3,7 +3,7 @@ import numpy as np
 from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
 
-def colourSegmentation(img, down_resolution=(480,360)):
+def colourSegmentation(img, down_resolution=(480, 360)):
 
 	# Initialise variables
 	x = None
@@ -40,20 +40,19 @@ def colourSegmentation(img, down_resolution=(480,360)):
 	contours = sorted(contours, key=cv.contourArea, reverse=True)[:5]
 
 	# Define min area for contour and loop through each contour.
-	# If no contours found, then the loop will not start
-	cnt_area = 1000
+	threshold_area = 1000
 	for cnt in contours:
 
 		# Find current contour's area
 		area_cnt = cv.contourArea(cnt)
 
 		# If area is bigger than the min (cnt_area)
-		if area_cnt > cnt_area:
+		if area_cnt > threshold_area:
 
 			# Find the perimeter of cnt, closed loop contour.
 			perimeter_cnt = cv.arcLength(cnt, True)
 
-			# Find max deviation from contour allowed to occur for approx.
+			# Find max deviation from contour allowed to occur for approximation.
 			# Smaller number defines stricter error requirement
 			epsilon = 0.015 * perimeter_cnt
 
@@ -69,33 +68,31 @@ def colourSegmentation(img, down_resolution=(480,360)):
 				x, y, w, h = cv.boundingRect(cnt)
 				aspect_ratio = float(w) / h
 
-				# If aspect ratio is ~= 1 then its a square (gate) therefore
-				# store it as the current largest contour
-				#if aspect_ratio >= 0.90 and aspect_ratio <= 1.1:
-				cnt_area = area_cnt		# <-- not needed
+				# If aspect ratio is ~= 1 then its a square (gate)
+				if 0.90 <= aspect_ratio <= 1.10:
 
-				# Draw contours on img, biggest one, all of them, color, thickness
-				cv.drawContours(img, cnt, -1, (0, 255, 0), 3)
+					# Draw contours on img, biggest one, all of them, color, thickness
+					cv.drawContours(img, cnt, -1, (0, 255, 0), 3)
 
-				# Plot rectangle, coords, color, thickness
-				cv.rectangle(img, (x, y), (x+w, y+h), (0, 255, 255), 1)
+					# Plot rectangle, coords, color, thickness
+					cv.rectangle(img, (x, y), (x+w, y+h), (0, 255, 255), 1)
 
-				# Compute the centre of the bounding rect and plot (on img, 
-				# using centre coords, radius, color, filled)
-				centre = np.array([int(x + w/2), int(y + h/2)])
-				cv.circle(img, tuple(centre), 5, (255, 255, 255), -1)
+					# Compute the centre of the bounding rect and plot (on img, 
+					# using centre coords, radius, color, filled)
+					centre = np.array([int(x + w/2), int(y + h/2)])
+					cv.circle(img, tuple(centre), 5, (255, 255, 255), -1)
 
-				# Find horizontal and vertical distance from centre of frame to
-				# centre of bounding rect. The [-1, 1] corrects coordinates to
-				# align camera rotation with aircraft coordinates.
-				offset = (centre - img_centre) * np.array([-1, 1])
-				cv.arrowedLine(img, tuple(img_centre), (tuple(centre)[0], 
-					tuple(img_centre)[1]), (255, 255, 255))
-				cv.arrowedLine(img, tuple(img_centre), (tuple(img_centre)[0], 
-					tuple(centre)[1]), (255, 255, 255))
+					# Find horizontal and vertical distance from centre of frame to
+					# centre of bounding rect. The [-1, 1] corrects coordinates to
+					# align camera rotation with aircraft coordinates.
+					offset = (centre - img_centre) * np.array([-1, 1])
+					cv.arrowedLine(img, tuple(img_centre), (tuple(centre)[0], 
+						tuple(img_centre)[1]), (255, 255, 255))
+					cv.arrowedLine(img, tuple(img_centre), (tuple(img_centre)[0], 
+						tuple(centre)[1]), (255, 255, 255))
 
-				# Largest cnt meeting requirements found therefore break
-				break
+					# Largest cnt meeting requirements found therefore break
+					break
 
 	return (img, blur, mask_hsv), (x, y, w, h, offset)
 
@@ -132,13 +129,12 @@ def gateEdgeDetector(frame, binary_mask):
 
 				# Similar heights therefore use peak i and i + 1
 				peaks = np.array([peaks[sort_index[i]], peaks[sort_index[i+1]]])
-
-				print('Breaking: ' + str(peaks))
+				#print('Breaking: ' + str(peaks))
 				break
 
 			# Last iteration, no suitable peaks therefore set to empty list
 			elif i == (len(peaks) - 2):
-				print('Too much height difference')
+				#print('Too much height difference')
 				peaks = []
 
 	elif len(peaks) == 1:
@@ -160,7 +156,7 @@ def gateEdgeDetector(frame, binary_mask):
 		num_of_edges = 2
 
 	# Draw the peak columns on the frame
-	print("About to draw: " + str(peaks))
+	# print("About to draw: " + str(peaks))
 	for column_index in peaks:
 		cv.rectangle(frame, (column_index, 0), (column_index, img_shape[1]), 
 			(255, 0, 0), 2)
@@ -182,13 +178,15 @@ def plotFrame(frame, blur, mask_hsv, distance):
 	blur_plot = False
 	mask_hsv_plot = False
 
+	img_shape = frame.shape[:2]	# (rows, cols)
+
 	if frame_plot:
 		# Text on frame. (frame, text, bottom-left position, font, font size,
 		# colour, thickness)
 		if distance is not None:
 			text = 'Distance: {:.4g} cm'.format(distance)
-			cv.putText(frame, text, (0, 350), cv.FONT_HERSHEY_PLAIN, 1, 
-				(255,255,255), 1)
+			cv.putText(frame, text, (int(0*img_shape[1]), int(0.95*img_shape[0])),
+				cv.FONT_HERSHEY_PLAIN, 1, (255,255,255), 1)
 
 		cv.namedWindow("Frame", cv.WINDOW_NORMAL)
 		cv.resizeWindow("Frame", 480, 360)
