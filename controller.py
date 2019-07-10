@@ -27,15 +27,15 @@ def runEdgeCont(w, hori_offset, num_of_edges, dist_to_gate, dt, tello):
 
 		# The distance cannot be determined hence magnitude of offset does
 		# not indicate the magnitude of the response required therefore a
-		# constant error is set to force the drone to move the other way
+		# constant error is set to force the drone to move the other way.
 		if hori_offset <= 0:
 			error = -3
 		else:
 			error = 3
 
 	else:
-		print('No Edges found')
-		tello.rc()
+		#print('No Edges found')
+		tello.rc(fb=40)
 		return
 	
 	try:
@@ -58,14 +58,15 @@ def edgesPD(error, prev_error, dt, tello):
 
 	# PD constants and controller
 	Kp = 3
-	Td = 0.5
+	Td = 1
 	pid_input = -Kp * (error + Td * error_dot)
 
 	# Limit PID input to max of 100, and minimum of -100
 	pid_input = controllerLimits(pid_input, -100, 100)
 
 	# Controller inputs to tello
-	tello.rc(lr=int(pid_input))
+	tello.rc(lr=int(pid_input), fb=40)
+
 
 def runPID(w, h, offset, dist_to_gate, dt, tello):
 	''' Calculates error and runs the PID controller
@@ -96,14 +97,14 @@ def runPID(w, h, offset, dist_to_gate, dt, tello):
 	# 	'Vertical angle: '+ str(offset_angle[1] * 180/np.pi))
 
 	# Reference for horizontal, vertical and distance
-	reference = np.array([0, 0, 250])
+	state = tello.readState()
+	reference = np.array([0, state['pitch'], 250])
 	signal = np.concatenate((offset_angle * 180/np.pi, [dist_to_gate]))
 	error = signal - reference
 
 	try:
 		PID(error, runPID.prev_error, dt, tello)
 	except AttributeError:
-		print('run: attribute error.')
 		PID(error, error, dt, tello)
 
 	# prev_error needs to be persistent hence is an attribute
@@ -116,17 +117,17 @@ def PID(error, prev_error, dt, tello):
 	# Integral needs to be persistent hence is an attribute of PID
 	try:
 		PID.integral += error * dt
+		#print(PID.integral)
 	except AttributeError:
 		PID.integral = np.zeros(len(error))
-		print('PID integral initialised = ' + str(PID.integral))
 
 	# Numerical differentiation - first order difference scheme
 	error_dot = (error - prev_error) / dt
 
-	# PID constants and controller
-	Kp = 3
-	Ti = 1000000000000
-	Td = 0.5
+	# PID constants and controller (Standard form)
+	Kp = np.array([3.3, 6, 3.3])
+	Ti = 100
+	Td = [0.7, 0.5, 0.7]
 	pid_input = -Kp * (error + 0*PID.integral / Ti + Td * error_dot)
 	#Pterm = -Kp*error
 	#Iterm = -Kp/Ti * PID.integral
@@ -137,7 +138,7 @@ def PID(error, prev_error, dt, tello):
 	pid_input = controllerLimits(pid_input, -100, 100)
 
 	# Controller inputs to tello
-	tello.rc(lr=int(pid_input[0]), ud=int(pid_input[1]), fb=-int(0.25*pid_input[2]))
+	tello.rc(lr=int(pid_input[0]), ud=int(pid_input[1]), fb=40)#fb=-int(0.25*pid_input[2]))
 
 
 def controllerLimits(cont_input, min_limit, max_limit):
