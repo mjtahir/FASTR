@@ -20,8 +20,12 @@ class Tello:
 	LOCAL_PORT = 8889
 	LOCAL_ADDRESS = (LOCAL_IP, LOCAL_PORT)
 
-	# Video port for receiving
+	# Port for receiving video
 	VIDEO_PORT = 11111
+
+	# State address
+	STATE_PORT = 8890
+	STATE_ADDRESS = (LOCAL_IP, STATE_PORT)
 
 	# Wait time between commands (s)
 	command_timeout = 0.3
@@ -38,32 +42,67 @@ class Tello:
 		self.frame = None   # Video frame
 		self.streamon = False
 
-		# Socket for commands and video. IPv4, with UDP
+		# Socket for commands, video and state. IPv4, with UDP
 		self.socket_cmd = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		self.socket_video = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+		self.socket_state = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-		# Bind the local address to enable communication
-		self.socket_cmd.bind(Tello.LOCAL_ADDRESS)
+		# Bind to enable communication and listening
+		self.socket_cmd.bind(Tello.LOCAL_ADDRESS)	# comms
+		self.socket_state.bind(Tello.STATE_ADDRESS)	# listening for state
 
 		# Recevier thread - Daemon True so it closes when main thread ends
 		self.receive_thread = threading.Thread(target=self._udpReceive, 
-			daemon = True)
+			daemon=True)
 		self.receive_thread.start()
 
 		# Send a byte string "command" to initiate Tello's SDK mode
 		self.sendCommand('command')
-		#self.socket_cmd.sendto(b'command', TELLO_ADDRESS)
-		#print('Sent: command')
 
 	def _udpReceive(self):
 		'''Method runs as a thread to constantly receive responses.'''
 		while True:
 			try:
-				self.response, addr = self.socket_cmd.recvfrom(2048)
+				self.response, _ = self.socket_cmd.recvfrom(1024)
 				print('Response: ' + self.response.decode('utf-8'))
 			except Exception as exc:
-				print('Exception in udpReceiver:', exc)
-	
+				print('Exception in udpReceive:', exc)
+
+	def startStateCapture(self):
+		self.state_thread = threading.Thread(target=self._stateReceive,
+			daemon=True)
+		self.state_thread.start()
+		time.sleep(0.01)	# Time to retrieve first state
+
+	def _stateReceive(self):
+		while True:
+			try:
+				self.raw_state, _ = self.socket_state.recvfrom(1024)
+				self.raw_state = self.raw_state.decode('utf-8')
+			except Exception as exc:
+				print('Exception in _stateReceive:', exc)
+
+	def readState(self):
+		try:
+			# Parses the raw string by splitting at the semicolons, deleting
+			# the last unnecessary element and creating a list of floats of the
+			# numbers after the colon.
+			self.state = self.raw_state.split(';')
+			del self.state[-1]		# Delete last element: [....,'\r\n']
+			self.state = [float(i.split(':')[1]) for i in self.state]
+
+			# Create keys and zip with the floats to create a dictionary
+			self.state_dict_keys = ('pitch','roll','yaw','vx','vy','vz','templ',
+				'temph','tof','height','battery','baro','time','ax','ay','az')
+			self.state_dict = dict(zip(self.state_dict_keys, self.state))
+
+			return self.state_dict
+
+		# If the stateReceive thread was just started then raw_state may not
+		# exist yet
+		except AttributeError as atr_error:
+			print('Exception in readState:', atr_error)
+
 	def startVideoCapture(self):
 		'''
 		Initiates video capture by starting the Tello camera, finding the 
@@ -153,7 +192,7 @@ class Tello:
 
 	def rc(self, lr=0, fb=0, ud=0, yaw=0):
 		'''
-		Allows for 4 channel remote controller type commands to be sent. 
+		Allows for 4 channel remote control type commands to be sent. 
 		The limits for each input is -100 to +100 (percent?)
 		'''
 		return self.sendCommandNoWait('rc ' + str(lr) + ' ' + str(fb)
