@@ -98,7 +98,7 @@ def runPID(w, h, offset, dist_to_gate, dt, tello):
 
 	# Reference for horizontal, vertical and distance
 	state = tello.readState()
-	reference = np.array([0, state['pitch'], 250])
+	reference = np.array([0, state['pitch'] - 8, 250])	# 8 degree tilt
 	signal = np.concatenate((offset_angle * 180/np.pi, [dist_to_gate]))
 	error = signal - reference
 
@@ -127,7 +127,7 @@ def PID(error, prev_error, dt, tello):
 	# PID constants and controller (Standard form)
 	Kp = np.array([3.3, 6, 3.3])
 	Ti = 100
-	Td = [0.7, 0.5, 0.7]
+	Td = [0.9, 0.4, 0.7]
 	pid_input = -Kp * (error + 0*PID.integral / Ti + Td * error_dot)
 	#Pterm = -Kp*error
 	#Iterm = -Kp/Ti * PID.integral
@@ -138,7 +138,7 @@ def PID(error, prev_error, dt, tello):
 	pid_input = controllerLimits(pid_input, -100, 100)
 
 	# Controller inputs to tello
-	tello.rc(lr=int(pid_input[0]), ud=int(pid_input[1]), fb=40)#fb=-int(0.25*pid_input[2]))
+	tello.rc(lr=int(pid_input[0]), ud=int(pid_input[1]), fb=60)#fb=-int(0.25*pid_input[2]))
 
 
 def controllerLimits(cont_input, min_limit, max_limit):
@@ -157,3 +157,5 @@ def controllerLimits(cont_input, min_limit, max_limit):
 	limited_input = np.where(cont_input > max_limit, max_limit, cont_input)
 	limited_input = np.where(limited_input < min_limit, min_limit, limited_input)
 	return limited_input
+
+# PID left/right overshooting too much
