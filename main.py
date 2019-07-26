@@ -1,27 +1,30 @@
 import cv2 as cv
 import time
 import numpy as np
-from timeit import default_timer as timer
 
 import config
 from tello_methods import Tello
 from pose_estimation import simpleDistCalibration, simpleDist
-from gate_detection import colourSegmentation, gateEdgeDetector, plotFrame
+from gate_detection import colourSegmentation, gateEdgeDetector, PlotFrames
 from controller import runPID, runEdgeCont
 
-# Instantiate a tello object and setup
+# Initialise Tello
 tello = Tello()
 tello.getBattery()
 tello.startVideoCapture()
 tello.startStateCapture()
-tello.rc()	# reset controls to zereos
+tello.rc()	# reset controls to zeros
 
-fly = True
+fly = False
 if fly:
 	tello.takeoff()
 	time.sleep(8)
-	tello.move('up',20)
+	tello.move('up',150)
 
+# Initialise the plots object, constructs and positions the required plots.
+plots = PlotFrames(plot_frame=True, plot_blur=True, plot_mask=True)
+
+# Counter and user command flags
 screenshot_count = 1
 track_gate_user = False
 controller_on_user = True
@@ -46,13 +49,13 @@ try:
 			if cs_offset is None:
 				ed_offset, ed_width, num_of_edges = gateEdgeDetector(img, mask_hsv)
 				width = ed_width
-			
-			distance = simpleDist(focal_length, config.GATE_WIDTH, width)
-			plotFrame(img, blur, mask_hsv, distance)
-		else:
-			cv.imshow("Frame", frame)
 
-		end_time = timer()
+			distance = simpleDist(focal_length, config.GATE_WIDTH, width)
+			plots.updatePlots(img, blur, mask_hsv, distance)
+		else:
+			cv.imshow('Raw Frame', frame)
+
+		end_time = time.time()
 		if track_gate_user and controller_on_user:
 			try:
 				dt = end_time - start_time
@@ -63,7 +66,7 @@ try:
 				runPID(cs_width, cs_height, cs_offset, distance, dt, tello)
 			else:
 				runEdgeCont(ed_width, ed_offset, num_of_edges, distance, dt, tello)
-		start_time = timer()
+		start_time = time.time()
 
 		# Display frame and check for user input. Note these user inputs only work
 		# if a frame is displayed and selected.
@@ -79,6 +82,8 @@ try:
 		elif key == ord('t'):
 			track_gate_user = not track_gate_user
 			tello.rc()
+			if track_gate_user:
+				cv.destroyWindow('Raw Frame')
 
 		elif key == ord('c'):
 			controller_on_user = not controller_on_user
@@ -101,8 +106,7 @@ except Exception:
 	print("Main loop crashed. Exception Handling")
 	raise
 
-# Measure camera offset angle <---
-# implement user control into code, 
+# implement user control into code,
 # dilation for gate detection, currently flickers <---
 # PnP
 
