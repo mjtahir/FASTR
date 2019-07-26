@@ -72,7 +72,7 @@ def colourSegmentation(img, down_resolution=(480, 360)):
 				if 0.90 <= aspect_ratio <= 1.10:
 
 					# Draw contours on img, biggest one, all of them, color, thickness
-					cv.drawContours(img, cnt, -1, (0, 255, 0), 3)
+					cv.drawContours(img, approx_cnt, -1, (0, 255, 0), 6)
 
 					# Plot rectangle, coords, color, thickness
 					cv.rectangle(img, (x, y), (x+w, y+h), (0, 255, 255), 1)
@@ -172,31 +172,56 @@ def gateEdgeDetector(frame, binary_mask):
 	return (hori_offset, width, num_of_edges)
 
 
-def plotFrame(frame, blur, mask_hsv, distance):
+class PlotFrames:
+	'''Class to initialise and update the required frames.'''
 
-	frame_plot = True
-	blur_plot = False
-	mask_hsv_plot = False
+	def __init__(self, plot_frame=True, plot_blur=False, plot_mask=False):
+		'''Initialises the required frames and their positions.'''
+		self.plot_frame = plot_frame
+		self.plot_blur = plot_blur
+		self.plot_mask = plot_mask
 
-	img_shape = frame.shape[:2]	# (rows, cols)
+		if plot_frame:
+			cv.imshow('Frame', np.zeros([360, 480]))
+			cv.moveWindow('Frame', 67, 515)	# taskbar 67 pixel width
 
-	if frame_plot:
-		# Text on frame. (frame, text, bottom-left position, font, font size,
-		# colour, thickness)
-		if distance is not None:
-			text = 'Distance: {:.4g} cm'.format(distance)
-			cv.putText(frame, text, (int(0*img_shape[1]), int(0.95*img_shape[0])),
-				cv.FONT_HERSHEY_PLAIN, 1, (255,255,255), 1)
+		if plot_mask:
+			cv.imshow('Mask HSV', np.zeros([360, 480]))
+			cv.moveWindow('Mask HSV', 67+480, 515)
 
-		cv.namedWindow("Frame", cv.WINDOW_NORMAL)
-		cv.resizeWindow("Frame", 480, 360)
-		cv.imshow("Frame", frame)
+		if plot_blur:
+			cv.imshow('Blurred', np.zeros([360, 480]))
+			cv.moveWindow('Blurred', 67+2*480, 515)
 
-	if blur_plot:
-		cv.imshow("Blurred", blur)
+	def updatePlots(self, frame, blur, mask, distance=None):
+		'''Updates plots with the frames in the argument.'''
+		self.frame = frame
+		self.blur = blur
+		self.mask = mask
+		self.distance = distance
+		self.img_shape = self.frame.shape[:2]	# (rows, cols)
 
-	if mask_hsv_plot:
-		cv.imshow("Mask HSV", mask_hsv)
+		if self.plot_frame:
+			self._updateDistance()
+			# cv.namedWindow("Frame", cv.WINDOW_NORMAL)
+			# cv.resizeWindow("Frame", 480, 360)
+			cv.imshow('Frame', self.frame)
+
+		if self.plot_blur:
+			cv.imshow('Blurred', self.blur)
+
+		if self.plot_mask:
+			cv.imshow('Mask HSV', self.mask)
+
+	def _updateDistance(self):
+		'''Updates the distance text on the frame.'''
+		# Text on frame. (frame, text, bottom-left position, font, 
+		# font size, colour, thickness)
+		if self.distance is not None:
+			text = "Distance: {:.4g} cm".format(self.distance)
+			position = (int(0*self.img_shape[1]), int(0.95*self.img_shape[0]))
+			cv.putText(self.frame, text, position, cv.FONT_HERSHEY_PLAIN, 1,
+				(255,255,255), 1)
 
 ################################################################################
 
