@@ -1,6 +1,7 @@
 import socket
 import threading
 import time
+from errno import ENETUNREACH
 import cv2 as cv
 # import libh264decoder
 
@@ -57,7 +58,17 @@ class Tello:
 		self.receive_thread.start()
 
 		# Send a byte string "command" to initiate Tello's SDK mode
-		self.sendCommand('command')
+		try:
+			self.sendCommand('command')
+
+		# Prints a message and stops the program if no connection exists.
+		except OSError as exc:
+			if exc.errno == ENETUNREACH:
+				print("Network connection is not established. Wait for Wi-Fi" +
+					" to finish connecting to Tello and retry.")
+				print(exc)
+				self.closeSockets()
+				raise SystemExit(0)
 
 	def _udpReceive(self):
 		'''Method runs as a thread to constantly receive responses.'''
@@ -69,12 +80,14 @@ class Tello:
 				print('Exception in udpReceive:', exc)
 
 	def startStateCapture(self):
+		'''Creates and starts a thread for listening to incoming state.'''
 		self.state_thread = threading.Thread(target=self._stateReceive,
 			daemon=True)
 		self.state_thread.start()
 		time.sleep(0.01)	# Time to retrieve first state
 
 	def _stateReceive(self):
+		'''Method runs as a thread to constantly receive updated state.'''
 		while True:
 			try:
 				self.raw_state, _ = self.socket_state.recvfrom(1024)
@@ -83,6 +96,30 @@ class Tello:
 				print('Exception in _stateReceive:', exc)
 
 	def readState(self):
+		'''Parses the state string and returns it as a dictionary type
+
+		The raw state has following form:
+		"pitch:%d;roll:%d;yaw:%d;vgx:%d;vgy%d;vgz:%d;templ:%d;temph:%d;tof:%d;
+		h:%d;bat:%d;baro:%.2f;time:%d;agx:%.2f;agy:%.2f;agz:%.2f;\r\n”
+
+		The returned dictionary contains the following:
+		{'pitch': %f,
+		'roll': %f,
+		'yaw': %f,
+		'vx': %f,
+		'vy': %f,
+		'vz': %f,
+		'templ': %f,
+		'temph': %f,
+		'tof': %f,
+		'height': %f,
+		'battery': %f,
+		'baro': %f,
+		'time': %f,
+		'ax': %f,
+		'ay': %f,
+		'az': %f}
+		'''
 		try:
 			# Parses the raw string by splitting at the semicolons, deleting
 			# the last unnecessary element and creating a list of floats of the
@@ -136,8 +173,11 @@ class Tello:
 		if self.streamon:
 			self.stopVideoCapture()
 
+	def closeSockets(self):
+		'''Closes all sockets.'''
 		self.socket_cmd.close()
 		self.socket_video.close()
+		self.socket_state.close()
 
 	def stopVideoCapture(self):
 		'''Stops video capture by sending "streamoff" command.'''
