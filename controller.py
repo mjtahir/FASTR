@@ -1,6 +1,98 @@
 import numpy as np
 import config
 from tello_methods import Tello
+from localisation import trueState
+
+def runWaypoint(streamingClient, waypoint, tello, dt):
+	'''
+	Controller for waypoint navigation using OptiTrack (streamingClient) and 
+	given waypoints. Obtains the state and then projects a vector to the  next 
+	waypoint to find yaw offset, as well as the forward/back and left/right 
+	combinations of inputs required to directly track a waypoint.
+	'''
+	true_state = trueState(streamingClient)
+	current_position = true_state[1]
+	current_orient_euler = true_state[3]
+
+	try:
+		# Relative vector from current position to current waypoint
+		r_wd = waypoint[runWaypoint.current_waypoint] - current_position
+	except (IndexError, AttributeError):
+		# First time run or all waypoints reached therefore set to start
+		runWaypoint.current_waypoint = 0
+		r_wd = waypoint[runWaypoint.current_waypoint] - current_position
+
+	# Distance to the next waypoint. Transition to next if within 50 cm
+	distance_to_waypoint = np.linalg.norm(r_wd)
+	if distance_to_waypoint < 50:
+		runWaypoint.current_waypoint += 1
+
+	# Vector projection along x-y plane (height component (z) is zero)
+	r_wd_proj = np.array([r_wd[0], r_wd[1], 0])
+
+	# Find the yaw angle (between the vector and the x-axis) through the dot
+	# product formula. This gives the yaw angle required to face the waypoint.
+	yaw_w = np.arctan2(r_wd_proj[1], r_wd_proj[0])		# in radians
+
+	# Offset angle between drone heading and waypoint heading angle (yaw)
+	yaw_w = yaw_w * 180/np.pi
+	beta = yaw_w - (current_orient_euler[2] * 180/np.pi)
+	# state = tello.readState()
+	# beta = yaw_w - state['yaw']		# in degree
+
+	# yaw_w can give values from -180 to 180, the Tello state can range from
+	# -180 to 180 hence max beta: 360, min beta = -360.
+	# Correct the angle to shortest rotation if exceeding 180 degrees
+	if beta > 180:
+		beta = beta - 360
+	elif beta < -180:
+		beta = beta + 360
+
+	# Use the angle to find components of the vector projection in the forward/
+	# back direction and the left/right direction.
+	signal = np.array([np.linalg.norm(r_wd_proj) * np.sin(beta * np.pi/180),	# Lateral
+		np.linalg.norm(r_wd_proj) * np.cos(beta * np.pi/180),	# Longitudinal
+		r_wd[2],									# Vertical
+		beta])
+	
+	reference = np.array([0, 0, 0, 0])
+	error = signal - reference
+
+	try:
+		controllerWaypoint(error, runWaypoint.prev_error, dt, tello)
+	except AttributeError:
+		controllerWaypoint(error, error, dt, tello)
+
+	runWaypoint.prev_error = error
+	return error
+
+
+def controllerWaypoint(error, prev_error, dt, tello):
+	''' PD controller for navigating to waypoints. '''
+
+	# Numerical differentiation - first order difference scheme
+	error_dot = (error - prev_error) / dt
+
+	# PD constants and controller (Standard form)
+	Kp = np.array([1, 1, 1, 10])	# lr, fb, ud, yaw
+	Td = np.array([0, 0, 0, 0])
+	pid_input = Kp * (error + Td * error_dot)
+
+	# Longitudinal to laterial ratio
+	ratio = pid_input[1] / pid_input[0]
+
+	# Maintain ratio between the limited controller inputs
+	pid_input = controllerLimits(pid_input, -100.0, 100.0)
+	if abs(ratio) > 1:
+		pid_input[0] = (1 / ratio) * pid_input[1]
+		#component[1] = limited_component[1]
+	else:
+		pid_input[1] = ratio * pid_input[0]
+		#component[0] = limited_component[0]
+	# tello.rc(yaw=int(pid_input[3]))
+	tello.rc(lr=int(pid_input[0]), fb=int(pid_input[1]), ud=-int(pid_input[2]), 
+			 yaw=int(pid_input[3]))
+
 
 def runEdgeCont(w, hori_offset, num_of_edges, dist_to_gate, dt, tello):
 	'''
@@ -33,8 +125,8 @@ def runEdgeCont(w, hori_offset, num_of_edges, dist_to_gate, dt, tello):
 		else:
 			error = 3
 
+	# No edges found so just move forward
 	else:
-		#print('No Edges found')
 		tello.rc(fb=40)
 		return
 	
@@ -127,7 +219,7 @@ def PID(error, prev_error, dt, tello):
 	# PID constants and controller (Standard form)
 	Kp = np.array([3.3, 6, 3.3])
 	Ti = 100
-	Td = [0.9, 0.4, 0.7]
+	Td = np.array([0.9, 0.4, 0.7])
 	pid_input = -Kp * (error + 0*PID.integral / Ti + Td * error_dot)
 	#Pterm = -Kp*error
 	#Iterm = -Kp/Ti * PID.integral
@@ -138,6 +230,7 @@ def PID(error, prev_error, dt, tello):
 	pid_input = controllerLimits(pid_input, -100, 100)
 
 	# Controller inputs to tello
+	print('here')
 	tello.rc(lr=int(pid_input[0]), ud=int(pid_input[1]), fb=60)#fb=-int(0.25*pid_input[2]))
 
 
@@ -157,5 +250,3 @@ def controllerLimits(cont_input, min_limit, max_limit):
 	limited_input = np.where(cont_input > max_limit, max_limit, cont_input)
 	limited_input = np.where(limited_input < min_limit, min_limit, limited_input)
 	return limited_input
-
-# PID left/right overshooting too much
