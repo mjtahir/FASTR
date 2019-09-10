@@ -225,6 +225,11 @@ class Tello:
 		'''Rotates cw or ccw for a maximum of 3600 degrees.'''
 		return self.sendCommand(direction + ' ' + str(degrees))
 
+	def curve(self, point1, point2, speed):
+		point1 = str(point1)[1:-1]
+		point2 = str(point2)[1:-1]
+		return self.sendCommand('curve ' + point1 + ' ' + point2 + ' ' + str(speed))
+
 	# Set Commands
 	def setSpeed(self, speed):
 		'''Sets speed given in cm/s. Range from 10 - 100 cm/s.'''
