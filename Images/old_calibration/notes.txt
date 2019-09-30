@@ -1,0 +1,5 @@
+- These images were used for the 'simpleDistCalibration' function in file 'pose_estimation.py'.
+- The images are taken at set distances from the gate (100cm, 201cm and 324 cm approximately) using the Tello's photo mode.
+- The images were taken using the Official Tello App which led to a slightly increased FOV compared to normal video streaming using the SDK.
+- Since this affects the calibration, these images were not used.
+Muddasir Tahir (17/06/19)
