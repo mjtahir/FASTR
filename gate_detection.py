@@ -17,7 +17,7 @@ def colourSegmentation(img, down_resolution=(480, 360)):
 	img = cv.resize(img, down_resolution, interpolation=cv.INTER_NEAREST)
 	img_shape = img.shape[:2]	# (rows, cols)
 	img_centre = np.array([int(img_shape[1]/2), int(img_shape[0]/2)]) # (x, y)
-	blur = cv.GaussianBlur(img, (5, 5), 0)
+	blur = cv.GaussianBlur(img, (3, 3), 0)
 	hsv = cv.cvtColor(blur, cv.COLOR_BGR2HSV)
 
 	# Red color hue values range from approx 167 to 10 hence 2 separate masks 
@@ -268,6 +268,8 @@ if __name__ == "__main__":
 	else:
 		vid = cv.VideoCapture(0)	# webcam
 
+	plots = PlotFrames(plot_frame=True, plot_blur=False, plot_mask=False)
+
 	screenshot_count = 1
 	start = timer()
 	while True:
@@ -287,7 +289,7 @@ if __name__ == "__main__":
 		distance = simpleDist(focal_length, config.GATE_WIDTH, w)
 
 		gateEdgeDetector(img, mask_hsv)
-		plotFrame(img, blur, mask_hsv, distance)
+		plots.updatePlots(img, blur, mask_hsv, distance)
 
 		# Set to waitKey(33) for nearly 30 fps
 		# Display frame and check for user input.
