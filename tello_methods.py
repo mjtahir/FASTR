@@ -2,8 +2,10 @@ import socket
 import threading
 import time
 from errno import ENETUNREACH
+
 import cv2 as cv
-# import libh264decoder
+import numpy as np
+import libh264decoder
 
 class Tello:
 	'''
@@ -23,6 +25,7 @@ class Tello:
 
 	# Port for receiving video
 	VIDEO_PORT = 11111
+	VIDEO_ADDRESS = (LOCAL_IP, VIDEO_PORT)
 
 	# State address
 	STATE_PORT = 8890
@@ -49,25 +52,28 @@ class Tello:
 		self.socket_state = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 		# Bind to enable communication and listening
+		# (Video bind only required for H264Decoder in startVideoCapture method)
 		self.socket_cmd.bind(Tello.LOCAL_ADDRESS)	# comms
 		self.socket_state.bind(Tello.STATE_ADDRESS)	# listening for state
 
-		# Recevier thread - Daemon True so it closes when main thread ends
+		# Receiver thread - Daemon True so it closes when main thread ends
 		self.receive_thread = threading.Thread(target=self._udpReceive, 
 			daemon=True)
 		self.receive_thread.start()
 
+		# Decoding function from the libh264decoder module
+		self.decoder = libh264decoder.H264Decoder()
+
 		# Send a byte string "command" to initiate Tello's SDK mode
 		try:
 			self.sendCommand('command')
-
-		# Prints a message and stops the program if no connection exists.
 		except OSError as exc:
+			# Prints a message and stops the program if no connection exists.		
 			if exc.errno == ENETUNREACH:
 				print("Network connection is not established. Wait for Wi-Fi" +
 					" to finish connecting to Tello and retry.")
 				print(exc)
-				self.closeSockets()
+				self.shutdown()
 				raise SystemExit(0)
 
 	def _udpReceive(self):
@@ -77,7 +83,7 @@ class Tello:
 				self.response, _ = self.socket_cmd.recvfrom(1024)
 				print('Response: ' + self.response.decode('utf-8'))
 			except Exception as exc:
-				print('Exception in udpReceive:', exc)
+				print('Exception in _udpReceive:', exc)
 
 	def startStateCapture(self):
 		'''Creates and starts a thread for listening to incoming state.'''
@@ -140,24 +146,84 @@ class Tello:
 		except AttributeError as atr_error:
 			print('Exception in readState:', atr_error)
 
-	def startVideoCapture(self):
+	def startVideoCapture(self, method="H264Decoder"):
 		'''
 		Initiates video capture by starting the Tello camera, finding the 
-		pointer to the video (VideoCapture) and starting the thread which reads
-		each frame
+		pointer to the video and starting the thread which updates each frame.
+		The 'method' argument can either be 'H264Decoder' or 'OpenCV' which
+		selects between 2 difference ways to retrieve and decode frames. The 
+		'H264Decoder' is significantly faster hence it is the default.
 		'''
+		# Send "streamon" command to start streaming video
 		self.sendCommandNoWait('streamon')
 		self.streamon = True
 
-		# Start video capture and thread
-		self.cap = cv.VideoCapture(Tello.camera_address)
-		self.ret, self.frame = self.cap.read()	# Manual first frame read
-		self.video_thread = threading.Thread(target=self._updateFrame, 
-							daemon=True)
-		self.video_thread.start()
+		if method == "H264Decoder":
+			# Bind video receiving socket
+			self.socket_video.bind(Tello.VIDEO_ADDRESS)
 
-	def _updateFrame(self):
-		'''Updates frame through a thread.'''
+			# Start thread using H264Decoder method
+			self.video_thread = threading.Thread(target=self._updateFrameH264, 
+							daemon=True)
+			self.video_thread.start()
+
+			# Wait until first frame arrives
+			while self.readFrame() is None:
+				time.sleep(0.1)
+		elif method == "OpenCV":
+			# VideoCapture (OpenCV function) will bind the camera_address
+			self.cap = cv.VideoCapture(Tello.camera_address)
+			self.ret, self.frame = self.cap.read()	# Manually read first frame
+
+			# Start thread using OpenCV method
+			self.video_thread = threading.Thread(target=self._updateFrameOpenCV, 
+							daemon=True)
+			self.video_thread.start()
+		else:
+			print('Invalid method, choose a correct method: "H264Decoder" or "OpenCV".')
+			self.shutdown()
+			raise SystemExit(0)
+
+	def _updateFrameH264(self):
+		'''Updates frames through a thread using the H264Decoder.'''
+		# Initialise empty byte array to hold the frames
+		packet_data = b""
+		while self.streamon:
+			try:
+				# Receive frames through the video socket and add to packet_data
+				res_string, _ = self.socket_video.recvfrom(2048)
+				packet_data += res_string
+
+				# res_string has a length of 1460 in each iteration except at 
+				# end of frame where it is smaller.
+				if len(res_string) != 1460:
+					for frame in self._h264_decode(packet_data):
+						# Convert the returned frame from BGR to RGB
+						self.frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+
+					# Reset packet_data to empty for next frame
+					packet_data = b""
+
+			except socket.error as exc:
+				print('Exception in _updateFrameH264:', exc)
+
+	def _h264_decode(self, packet_data):
+		'''Decodes raw H264 frame data to a decoded frame.'''
+		res_frame_list = []
+		frames = self.decoder.decode(packet_data)
+		for framedata in frames:
+			(frame, w, h, ls) = framedata
+			if frame is not None:
+				# print('frame size %i bytes, w %i, h %i, linesize %i' % (len(frame), w, h, ls))
+				frame = np.fromstring(frame, dtype=np.ubyte, count=len(frame), sep='')
+				frame = (frame.reshape((h, int(ls / 3), 3)))
+				frame = frame[:, :w, :]
+				res_frame_list.append(frame)
+
+		return res_frame_list
+
+	def _updateFrameOpenCV(self):
+		'''Updates frame through a thread using the VideoCapture pointer.'''
 		while self.streamon:
 			try:
 				self.ret, self.frame = self.cap.read()
@@ -172,6 +238,7 @@ class Tello:
 		'''Shutdown procedure, stop video capture and close sockets.'''
 		if self.streamon:
 			self.stopVideoCapture()
+		self.closeSockets()
 
 	def closeSockets(self):
 		'''Closes all sockets.'''
