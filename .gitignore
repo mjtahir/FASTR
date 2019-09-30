@@ -1,2 +1,7 @@
 # Folders
 __pycache__/
+
+# Files
+manual_tello_vid.mp4
+HSVranger.py
+test.py
