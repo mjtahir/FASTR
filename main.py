@@ -4,11 +4,14 @@ import numpy as np
 
 import config
 from tello_methods import Tello
-from pose_estimation import simpleDistCalibration, simpleDist
+from pose_estimation import simpleDistCalibration, simpleDist, estimatePosePnP
 from gate_detection import colourSegmentation, gateEdgeDetector, PlotFrames
 from controller import runPID, runEdgeCont, runWaypoint
 from localisation import (startTracking, trueState, waypointGeneration, 
 		waypointUpdate)
+
+# Try PnP with the distortion coefficients (seems to break near edges)
+# Try reduce yaw gain to 1 or 2 
 
 # Initialise Tello
 tello = Tello()
@@ -17,18 +20,20 @@ tello.startVideoCapture(method="H264Decoder")
 tello.startStateCapture()
 tello.rc()	# reset controls to zeros
 
-fly = False
+fly = True
 if fly:
 	tello.takeoff()
 	time.sleep(8)
 	# tello.move('up',100)
 
-# Setup connection with OptiTrack and the waypoints
-streamingClient = startTracking()
-waypoint = waypointGeneration(streamingClient)
+# Setup connection with optitrack and the waypoints
+optitrack = False
+if optitrack:
+	streamingClient = startTracking()
+	waypoint = waypointGeneration(streamingClient)
 
 # Initialise the plots object. Constructs and positions the required plots.
-plots = PlotFrames(plot_frame=True, plot_blur=True, plot_mask=True)
+plots = PlotFrames(plot_frame=True, plot_blur=False, plot_mask=True)
 
 # Find focal length per pixel using the calibration image
 cali_image = cv.imread('Images/cali_100cm.png', 1)
@@ -46,10 +51,11 @@ try:
 		frame = tello.readFrame()
 
 		if track_gate_user:
-			# Find the gate and its distance
-			cs_frames, cs_coords = colourSegmentation(frame)
+			# Find the gate and unpack the returned variables
+			cs_frames, cs_coords, cs_features = colourSegmentation(frame)
 			img, blur, mask_hsv = cs_frames
-			_, _, cs_width, cs_height, cs_offset = cs_coords
+			cs_x, cs_y, cs_width, cs_height, cs_offset = cs_coords
+			cs_contour, cs_bounding_box = cs_features
 			width = cs_width
 
 			cs_time_since_gate = time.time() - cs_find_time
@@ -60,12 +66,25 @@ try:
 			if cs_offset is None and cs_time_since_gate < 1.5:
 				ed_offset, ed_width, num_of_edges = gateEdgeDetector(img, mask_hsv)
 				width = ed_width
-				edge_detector_used = True
-			elif cs_offset is not None:
-				cs_find_time = time.time()	# update last gate find time
 
-			distance = simpleDist(focal_length, config.GATE_WIDTH, width)
-			plots.updatePlots(img, blur, mask_hsv, distance)
+				distance = simpleDist(focal_length, config.GATE_WIDTH, width)
+				plots.updatePlots(img, blur, mask_hsv, distance=distance)
+				edge_detector_used = True
+
+			elif cs_offset is not None:
+				# Solve the PnP problem using the 4 contour points
+				(cs_contour_sorted, rvec, tvec), euler = estimatePosePnP(cs_contour)
+				#print(euler)
+
+				# Update distance, plots and last gate find time
+				distance = tvec[2, 0]	# 3rd value in array (perpendicular)
+				plots.updatePlots(img, blur, mask_hsv, distance=distance, 
+					gate_centre=(int(cs_x), int(cs_y)), rvec=rvec, tvec=tvec, 
+					contour=cs_contour, bounding_box=cs_bounding_box, sorted_contour=cs_contour_sorted)
+				cs_find_time = time.time()
+			else:
+				plots.updatePlots(img, blur, mask_hsv)
+
 		else:
 			cv.imshow('Raw Frame', frame)
 
@@ -77,15 +96,18 @@ try:
 
 		if track_gate_user and controller_on_user:
 			# Update current waypoint and get vector to current waypoint
-			relative_vector = waypointUpdate(streamingClient, waypoint)
+			if optitrack:
+				relative_vector = waypointUpdate(streamingClient, waypoint)
 
 			if cs_offset is not None:
-				runPID(cs_width, cs_height, cs_offset, distance, dt, tello)
+				runPID(cs_width, cs_height, cs_offset, distance, dt, tello, euler)
 			elif edge_detector_used:
 				runEdgeCont(ed_width, ed_offset, num_of_edges, distance, dt, tello)
-			else:
+			elif optitrack:
 				runWaypoint(streamingClient, relative_vector, dt, tello)
 		start_time = time.time()
+
+		# Log data
 
 		# Display frame and check for user input. Note these user inputs only 
 		# work if a frame is displayed and selected.
@@ -95,7 +117,10 @@ try:
 			break
 
 		elif key == ord('s'):
-			cv.imwrite('screenshotFrame'+str(screenshot_count)+'.png', frame)
+			cv.imwrite('rawFrame'+str(screenshot_count)+'.png', frame)
+			# cv.imwrite('processedFrame'+str(screenshot_count)+'.png', img)
+			# cv.imwrite('maskFrame'+str(screenshot_count)+'.png', mask_hsv)
+			# cv.imwrite('blurFrame'+str(screenshot_count)+'.png', blur)
 			screenshot_count += 1
 
 		elif key == ord('t'):
@@ -125,9 +150,21 @@ except Exception:
 	print("Main loop crashed. Exception Handling")
 	raise
 
+
+def startDataLogger():
+	f = open('data_log.dat', 'w+')
+	header_labels = ["Timestamp", "x (cm)", "y (cm)", "z (cm)", 
+					 "q0", "q1", "q2", "q3", "Mode", "Distance"]
+	np.savetxt(f, [], header=header_labels)
+
+
+def logData(file_handle, data):
+	np.savetxt(file_handle, data)
+
+
+
 # implement user control into code,
 # dilation for gate detection, currently flickers <---
-# PnP
 
 # pt1 = [100, 100, 100]
 # pt2 = [150, 0, 100]
