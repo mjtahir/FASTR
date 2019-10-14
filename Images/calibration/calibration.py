@@ -2,6 +2,11 @@ import numpy as np
 import cv2 as cv
 import glob
 
+# NOTE: THIS CALIBRATION HAS BEEN CONDUCTED WITH A RESOLUTION OF (960, 720), 
+# BUT THE CAMERA MATRIX WAS SCALED DOWN FOR (480, 360) IMAGES. 
+down_resolution = (480, 360)
+scale_factor = 0.5
+
 # termination criteria
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
@@ -19,13 +24,14 @@ images = glob.glob('*.png')
 for fname in images:
     print(fname)
     img = cv.imread(fname)
+    # img = cv.resize(img, down_resolution, interpolation=cv.INTER_NEAREST)
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
     # Find the chess board corners
     ret, corners = cv.findChessboardCorners(gray, (7,9), None)
 
     # If found, add object points, image points (after refining them)
-    if ret == True:
+    if ret:
         objpoints.append(objp)
 
         corners2 = cv.cornerSubPix(gray,corners, (11,11), (-1,-1), criteria)
@@ -43,18 +49,24 @@ ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints,
 print('Camera matrix: \n', mtx)
 print('Distortion matrix: \n', dist)
 
-img = cv.imread('screenshotFrame4.png')
-h,  w = img.shape[:2]
-newcameramtx, roi = cv.getOptimalNewCameraMatrix(mtx, dist, (w,h), 1, (w,h))
+# img = cv.imread('screenshotFrame4.png')
+# h,  w = img.shape[:2]
+# newcameramtx, roi = cv.getOptimalNewCameraMatrix(mtx, dist, (w,h), 1, (w,h))
+
+# 
+mtx = mtx * scale_factor
+mtx[2, 2] = mtx[2, 2] / scale_factor    # should be back to 1
+print(mtx)
 
 # undistort
-newcameramtx = mtx  # i.e. without optimalnewcameramatrix
 for fname in images:
     img = cv.imread(fname)
+    img = cv.resize(img, down_resolution, interpolation=cv.INTER_NEAREST)
     # dist[0][2:6] = 0  # use only k1 and k2
-    dst = cv.undistort(img, mtx, dist, None, newcameramtx)
+    # dst = cv.undistort(img, mtx, dist, None, newcameramtx)
+    dst = cv.undistort(img, mtx, dist)
     cv.imshow('Undistorted', dst)
-    cv.waitKey(1)
+    cv.waitKey(0)
 
 tot_error = 0
 for i in range(len(objpoints)):
