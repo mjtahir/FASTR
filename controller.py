@@ -147,7 +147,7 @@ def edgesPD(error, prev_error, dt, tello):
 	tello.rc(lr=int(pid_input), fb=60)
 
 
-def runPID(w, h, offset, dist_to_gate, dt, tello):
+def runPID(w, h, offset, dist_to_gate, dt, tello, euler):
 	''' Calculates error and runs the PID controller
 
 	arguments:
@@ -177,8 +177,8 @@ def runPID(w, h, offset, dist_to_gate, dt, tello):
 
 	# Reference for horizontal, vertical and distance
 	state = tello.readState()
-	reference = np.array([0, state['pitch'] - 8, 250])	# 8 degree tilt
-	signal = np.concatenate((offset_angle * 180/np.pi, [dist_to_gate]))
+	reference = np.array([0, state['pitch'] - 8, euler[2]*180/np.pi, 250])	# 8 degree tilt
+	signal = np.concatenate((offset_angle*180/np.pi, [0, dist_to_gate]))
 	error = signal - reference
 
 	try:
@@ -204,9 +204,10 @@ def PID(error, prev_error, dt, tello):
 	error_dot = (error - prev_error) / dt
 
 	# PID constants and controller (Standard form)
-	Kp = np.array([3.3, 6, 3.3])
+	# Gains for left/right, up/down, yaw, and forward/back (fb not used)
+	Kp = np.array([3.3, 6, 4, 3.3])
 	Ti = 100
-	Td = np.array([0.9, 0.4, 0.7])
+	Td = np.array([0.9, 0.4, 0, 0.7])
 	pid_input = -Kp * (error + 0*PID.integral / Ti + Td * error_dot)
 	#Pterm = -Kp*error
 	#Iterm = -Kp/Ti * PID.integral
@@ -217,7 +218,8 @@ def PID(error, prev_error, dt, tello):
 	pid_input = controllerLimits(pid_input, -100, 100)
 
 	# Controller inputs to tello
-	tello.rc(lr=int(pid_input[0]), ud=int(pid_input[1]), fb=60)#fb=-int(0.25*pid_input[2]))
+	tello.rc(lr=int(pid_input[0]), ud=int(pid_input[1]), yaw=int(pid_input[2]),
+				fb=60)#fb=-int(0.25*pid_input[3]))
 
 
 def controllerLimits(cont_input, min_limit, max_limit):
