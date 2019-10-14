@@ -3,6 +3,8 @@ import numpy as np
 from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
 
+import config
+
 def colourSegmentation(img, down_resolution=(480, 360)):
 
 	# Initialise variables
@@ -11,12 +13,14 @@ def colourSegmentation(img, down_resolution=(480, 360)):
 	w = None
 	h = None
 	offset = None
+	approx_cnt = None
+	box = None
 
 	# Resize image to reduce resolution for quicker processing
 	# Blur the image to reduce noise then convert to HSV colour space
 	img = cv.resize(img, down_resolution, interpolation=cv.INTER_NEAREST)
 	img_shape = img.shape[:2]	# (rows, cols)
-	img_centre = np.array([int(img_shape[1]/2), int(img_shape[0]/2)]) # (x, y)
+	img_centre = np.array([img_shape[1]//2, img_shape[0]//2]) # (x, y)
 	blur = cv.GaussianBlur(img, (3, 3), 0)
 	hsv = cv.cvtColor(blur, cv.COLOR_BGR2HSV)
 
@@ -31,6 +35,11 @@ def colourSegmentation(img, down_resolution=(480, 360)):
 
 	# Combine the masks. Outputs 0 or 255.
 	mask_hsv = mask_hsv1 + mask_hsv2
+
+	# morph_kernel_open = cv.getStructuringElement(cv.MORPH_CROSS,(3,3))
+	# morph_kernel_close = cv.getStructuringElement(cv.MORPH_CROSS,(3,3))
+	# mask_hsv = cv.morphologyEx(mask_hsv, cv.MORPH_OPEN, morph_kernel_open)
+	# mask_hsv = cv.morphologyEx(mask_hsv, cv.MORPH_CLOSE, morph_kernel_close)
 
 	# Find the contours in the HSV mask. RETR_LIST does not compute heirachy
 	# APPROX_SIMPLE saves memory by reducing number of points on straight line
@@ -56,45 +65,35 @@ def colourSegmentation(img, down_resolution=(480, 360)):
 			# Smaller number defines stricter error requirement
 			epsilon = 0.015 * perimeter_cnt
 
-			# Finds an approx contour for cnt, epsilon fitting factor and 
-			# closed
+			# Finds an approx contour for cnt, epsilon fitting factor and closed
 			approx_cnt = cv.approxPolyDP(cnt, epsilon, True)
 
 			# If quadrilateral shape
 			if len(approx_cnt) == 4:
 
-				# Find x, y (top left point) and w, h (width and height) 
-				# of the bounding rect. Calculate aspect ratio.
-				x, y, w, h = cv.boundingRect(cnt)
+				# Find x, y (centre point) and w, h (width and height) 
+				# of the bounding box. Calculate aspect ratio.
+				rect = cv.minAreaRect(approx_cnt)
+				(x, y), (w, h), angle_box = rect
 				aspect_ratio = float(w) / h
 
 				# If aspect ratio is ~= 1 then its a square (gate)
-				if 0.90 <= aspect_ratio <= 1.10:
+				if 0.50 <= aspect_ratio <= 1.50:
 
-					# Draw contours on img, biggest one, all of them, color, thickness
-					cv.drawContours(img, approx_cnt, -1, (0, 255, 0), 6)
-
-					# Plot rectangle, coords, color, thickness
-					cv.rectangle(img, (x, y), (x+w, y+h), (0, 255, 255), 1)
-
-					# Compute the centre of the bounding rect and plot (on img, 
-					# using centre coords, radius, color, filled)
-					centre = np.array([int(x + w/2), int(y + h/2)])
-					cv.circle(img, tuple(centre), 5, (255, 255, 255), -1)
+					# Create the bounding box and centre of box
+					box = cv.boxPoints(rect)
+					box = np.int64(box)
+					centre = np.int64([x, y])
 
 					# Find horizontal and vertical distance from centre of frame to
-					# centre of bounding rect. The [-1, 1] corrects coordinates to
+					# centre of bounding box. The [-1, 1] corrects coordinates to
 					# align camera rotation with aircraft coordinates.
 					offset = (centre - img_centre) * np.array([-1, 1])
-					cv.arrowedLine(img, tuple(img_centre), (tuple(centre)[0], 
-						tuple(img_centre)[1]), (255, 255, 255))
-					cv.arrowedLine(img, tuple(img_centre), (tuple(img_centre)[0], 
-						tuple(centre)[1]), (255, 255, 255))
 
 					# Largest cnt meeting requirements found therefore break
 					break
 
-	return (img, blur, mask_hsv), (x, y, w, h, offset)
+	return (img, blur, mask_hsv), (x, y, w, h, offset), (approx_cnt, box)
 
 
 def gateEdgeDetector(frame, binary_mask):
@@ -109,7 +108,7 @@ def gateEdgeDetector(frame, binary_mask):
 	column_sum = np.ravel(column_sum)	# Change to 1D array
 
 	img_shape = frame.shape[:2]	# (rows, cols)
-	img_centre = np.array([int(img_shape[1]/2), int(img_shape[0]/2)]) # (x, y)
+	img_centre = np.array([img_shape[1]//2, img_shape[0]//2]) # (x, y)
 	max_height = img_shape[0] * 255
 
 	# Find peaks of the row vector with min height and distance requirements
@@ -193,16 +192,19 @@ class PlotFrames:
 			cv.imshow('Blurred', np.zeros([360, 480]))
 			cv.moveWindow('Blurred', 67+2*480, 515)
 
-	def updatePlots(self, frame, blur, mask, distance=None):
+	def updatePlots(self, frame, blur, mask, distance=None, gate_centre=None, 
+		rvec=None, tvec=None, contour=None, bounding_box=None, sorted_contour=None):
 		'''Updates plots with the frames in the argument.'''
 		self.frame = frame
 		self.blur = blur
 		self.mask = mask
-		self.distance = distance
 		self.img_shape = self.frame.shape[:2]	# (rows, cols)
+		self.img_centre = (self.img_shape[1]//2, self.img_shape[0]//2) # (x, y)
 
 		if self.plot_frame:
-			self._updateDistance()
+			self._updateDistance(distance)
+			self._updateFeatures(gate_centre, rvec, tvec, contour, bounding_box)
+			self._updateSortedContour(sorted_contour)
 			# cv.namedWindow("Frame", cv.WINDOW_NORMAL)
 			# cv.resizeWindow("Frame", 480, 360)
 			cv.imshow('Frame', self.frame)
@@ -213,15 +215,43 @@ class PlotFrames:
 		if self.plot_mask:
 			cv.imshow('Mask HSV', self.mask)
 
-	def _updateDistance(self):
+	def _updateDistance(self, distance):
 		'''Updates the distance text on the frame.'''
-		# Text on frame. (frame, text, bottom-left position, font, 
-		# font size, colour, thickness)
-		if self.distance is not None:
-			text = "Distance: {:.4g} cm".format(self.distance)
+		# Text on frame. (frame, text, bottom-left position, font, font size, 
+		# colour, thickness)
+		if distance is not None:
+			text = "Distance: {:.4g} cm".format(distance)
 			position = (int(0*self.img_shape[1]), int(0.95*self.img_shape[0]))
 			cv.putText(self.frame, text, position, cv.FONT_HERSHEY_PLAIN, 1,
 				(255,255,255), 1)
+
+	def _updateFeatures(self, gate_centre, rvec, tvec, contour, bounding_box):
+		if gate_centre is not None:
+			'''Updates all the features on the frame.'''
+			# Plot the centre of the bounding box (on frame, using centre coords,
+			# radius, color, filled)
+			cv.circle(self.frame, gate_centre, 5, (255, 255, 255), -1)
+			# Draw contours/box on frame, biggest one, all of them, color, thickness
+			cv.drawContours(self.frame, contour, -1, (0, 255, 0), 6)
+			cv.drawContours(self.frame, [bounding_box], -1, (0, 255, 255), 2)
+			# Draw the axes on frame using the calibration data and PnP results
+			cv.drawFrameAxes(self.frame, config.CAMERA_MATRIX, config.DISTORTION, 
+				rvec, tvec, 25)
+			# Draw arrows from centre of frame to centre of gate
+			cv.arrowedLine(self.frame, self.img_centre, (gate_centre[0], 
+				self.img_centre[1]), (255, 255, 255))
+			cv.arrowedLine(self.frame, self.img_centre, (self.img_centre[0], 
+				gate_centre[1]), (255, 255, 255))
+
+	def _updateSortedContour(self, sorted_contour):
+		'''Plots a different colour dot at each contour point. Used to test
+		the order of points in the sorted contour.'''
+		if sorted_contour is not None:
+			sorted_contour = sorted_contour.astype(np.int64)
+			cv.circle(self.frame, tuple(sorted_contour[0,:]), 10, (0,0,255), -1)
+			cv.circle(self.frame, tuple(sorted_contour[1,:]), 10, (0,255,0), -1)
+			cv.circle(self.frame, tuple(sorted_contour[2,:]), 10, (255,0,0), -1)
+			cv.circle(self.frame, tuple(sorted_contour[3,:]), 10, (255,255,0), -1)
 
 ################################################################################
 
@@ -232,7 +262,7 @@ if __name__ == "__main__":
 	from timeit import default_timer as timer
 
 	from pose_estimation import simpleDistCalibration, simpleDist
-	import config
+	from pose_estimation import estimatePosePnP
 
 	# Read an image and create a copy
 	# src = cv.imread('Images/cali_100cm.png', 1)
@@ -249,26 +279,35 @@ if __name__ == "__main__":
 	cali_image = cv.imread('Images/cali_100cm.png', 1)
 	focal_length = simpleDistCalibration(cali_image, config.GATE_WIDTH, 100)
 
+	plots = PlotFrames(plot_frame=True, plot_blur=False, plot_mask=True)
+
 	# If video present use that, otherwise try image, else use webcam
 	if args.video:
 		vid = cv.VideoCapture(args.video)	# video file
 	elif args.image:
 		# Read the image, segment it, find distance and plot
 		image = cv.imread(args.image, 1)
-		cs_frames, cs_coords = colourSegmentation(image)
+		cs_frames, cs_coords, cs_features = colourSegmentation(image)#, down_resolution=(640,360))
 		img, blur, mask_hsv = cs_frames
-		_, _, w, _, _ = cs_coords
-
-		distance = simpleDist(focal_length, config.GATE_WIDTH, w)
-		plotFrame(img, blur, mask_hsv, distance)
+		cs_x, cs_y, w, _, offset = cs_coords
+		cs_contour, cs_bounding_box = cs_features
+		
+		if offset is not None:
+			(cs_contour_sorted, rvec, tvec), _ = estimatePosePnP(cs_contour)
+			distance = tvec[2,0]
+			plots.updatePlots(img, blur, mask_hsv, distance=distance, gate_centre=(int(cs_x), int(cs_y)), 
+				rvec=rvec, tvec=tvec, contour=cs_contour, bounding_box=cs_bounding_box,
+				sorted_contour=cs_contour_sorted)
+		else:
+			distance = simpleDist(focal_length, config.GATE_WIDTH, w)
+			gateEdgeDetector(img, mask_hsv)
+			plots.updatePlots(img, blur, mask_hsv, distance=distance)
 		cv.waitKey(0)
 
 		# Since image has been analysed, no need for rest of code
 		raise SystemExit(0)
 	else:
 		vid = cv.VideoCapture(0)	# webcam
-
-	plots = PlotFrames(plot_frame=True, plot_blur=False, plot_mask=False)
 
 	screenshot_count = 1
 	start = timer()
@@ -283,13 +322,21 @@ if __name__ == "__main__":
 			break
 
 		# Find the gate, then its distance then plot
-		cs_frames, cs_coords = colourSegmentation(src_img)
+		cs_frames, cs_coords, cs_features = colourSegmentation(src_img, down_resolution=(640,360))
 		img, blur, mask_hsv = cs_frames
-		_, _, w, _, offset = cs_coords
-		distance = simpleDist(focal_length, config.GATE_WIDTH, w)
+		cs_x, cs_y, w, _, offset = cs_coords
+		cs_contour, cs_bounding_box = cs_features
 
-		gateEdgeDetector(img, mask_hsv)
-		plots.updatePlots(img, blur, mask_hsv, distance)
+		if offset is not None:
+			(cs_contour_sorted, rvec, tvec), _ = estimatePosePnP(cs_contour)
+			distance = tvec[2,0]
+			plots.updatePlots(img, blur, mask_hsv, distance=distance, gate_centre=(int(cs_x), int(cs_y)), 
+				rvec=rvec, tvec=tvec, contour=cs_contour, bounding_box=cs_bounding_box,
+				sorted_contour=cs_contour_sorted)
+		else:
+			distance = simpleDist(focal_length, config.GATE_WIDTH, w)
+			gateEdgeDetector(img, mask_hsv)
+			plots.updatePlots(img, blur, mask_hsv, distance=distance)
 
 		# Set to waitKey(33) for nearly 30 fps
 		# Display frame and check for user input.
