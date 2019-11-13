@@ -342,7 +342,7 @@ class NatNetClient:
 
         # Send information to any listener.
         if self.newFrameListener is not None:
-#            self.newFrameListener( frameNumber, markerSetCount, unlabeledMarkersCount, #rigidBodyCount, skeletonCount, labeledMarkerCount, timecode, timecodeSub, timestamp, isRecording, #trackedModelsChanged )
+            # self.newFrameListener( frameNumber, markerSetCount, unlabeledMarkersCount, #rigidBodyCount, skeletonCount, labeledMarkerCount, timecode, timecodeSub, timestamp, isRecording, #trackedModelsChanged )
             self.newFrameListener = np.array([frameNumber, markerSetCount, unlabeledMarkersCount, rigidBodyCount, skeletonCount, labeledMarkerCount, timecode, timecodeSub, timestamp, isRecording, trackedModelsChanged])
 
     # Unpack a marker set description packet
@@ -519,4 +519,3 @@ class NatNetClient:
         commandThread.start()
 
         self.sendCommand( self.NAT_REQUEST_MODELDEF, "", self.commandSocket, (self.serverIPAddress, self.commandPort) )
-
