@@ -3,19 +3,19 @@ import numpy as np
 from tello_methods import Tello
 from NatNetClient import NatNetClient
 
-def startTracking():
+def startTracking(body_id_drone, body_id_gate):
 	'''
 	Initiate the OptiTrack (streamingClient) thread by constructing the object 
 	and running it. This is based on the NatNet v3.1 code supplied through 
 	NaturalPoint's SDK online.
 	'''
 	# This will create a new NatNet client
-	streamingClient = NatNetClient()
+	streamingClient = NatNetClient(body_id_drone, body_id_gate)
 
 	# Configure the streaming client to call our rigid body handler on the 
 	# emulator to send data out.
 	streamingClient.newFrameListener = True
-	streamingClient.rigidBodyListener = True
+	streamingClient.rigidBodyListener = np.zeros((2,3), dtype=object)
 
 	# Start up the streaming client now that the callbacks are set up.
 	# This will run perpetually, and operate on a separate thread.
@@ -23,10 +23,10 @@ def startTracking():
 	# Slow the OptiTrack threads down?
 
 	# Time to retrieve first state. If no state currently received, the listener
-	# just returns True.
+	# just remains the initial value
 	start_time = time.time()
 	print('Connecting to OptiTrack .....')
-	while streamingClient.rigidBodyListener is True:
+	while streamingClient.rigidBodyListener[0,0] == 0:
 		
 		current_time = time.time()
 		elapsed_time = current_time - start_time
@@ -45,19 +45,30 @@ def trueState(streamingClient):
 	orientation is returned in Euler angles.
 	'''
 	# Retrieve rigid body data from OptiTrack.
-	id_num, pos, quaternion = streamingClient.rigidBodyListener
+	id_num = streamingClient.rigidBodyListener[:, 0]
+	pos = streamingClient.rigidBodyListener[:, 1]
+	pos = np.vstack(pos)
+	quaternion = streamingClient.rigidBodyListener[:, 2]
+	quaternion = np.vstack(quaternion)
 
 	# Rotate coordinates to aircraft standard (forward x, right y, down z) from
 	# left x, back y, up z.
 	#rotated_pos = Cz(np.pi/2) @ Cx(np.pi/2) @ streamingClient.rigidBodyListener[1]
-	rotated_pos = Cx(np.pi) @ Cz(-np.pi/2) @ pos
-	rotated_pos = rotated_pos * 100		# change to cm
+	rotated_pos = Cx(np.pi) @ Cz(-np.pi/2) @ pos.T
+	rotated_pos = rotated_pos.T * 100		# change to cm
 
-	rotated_quat = Cx(np.pi) @ Cz(-np.pi/2) @ quaternion[0:3]
-	rotated_quat = np.concatenate([rotated_quat, np.array([quaternion[3]])])
-	euler = quaternion2Euler(rotated_quat)
-	
+	rotated_quat = Cx(np.pi) @ Cz(-np.pi/2) @ quaternion[:,0:3].T
+	rotated_quat = np.concatenate([rotated_quat, np.array([quaternion[:,3]])])
+	euler = quaternion2Euler(rotated_quat).T
+
 	return np.array([id_num, rotated_pos, rotated_quat, euler])
+
+
+def estimatedState(rvec, tvec):
+	'''Place holder function for state estimation'''
+	position = np.array([None, None, None])
+	orientation_euler = np.array([None, None, None])
+	return np.array([position, orientation_euler])
 
 
 def waypointGeneration(streamingClient):
@@ -79,29 +90,28 @@ def waypointGeneration(streamingClient):
 	# waypoint[:, 1] = y
 	# waypoint[:, 2] = z
 
-	start_position = trueState(streamingClient)[1]
+	start_position = trueState(streamingClient)[1][0,:]	# of tello
 
 	# State number of waypoints and list them below. Note units are in cm and 
 	# order is (x,y,z) in the standard aircraft coordinate system.
 	num_of_waypoints = 4
 	waypoint = np.zeros([num_of_waypoints, 3])
 	waypoint[0] = start_position
-	waypoint[1] = waypoint[0] + np.array([600, 0, 0])
+	waypoint[1] = waypoint[0] + np.array([700, 0, 0])
 	waypoint[2] = waypoint[1] + np.array([0, 300, 0])
-	waypoint[3] = waypoint[2] + np.array([-600, 0, 0])
-	# waypoint[4] = waypoint[3] + np.array([0, -300, 0])
+	waypoint[3] = waypoint[2] + np.array([-700, 0, 0])
+	# UPDATE NUM OF WAYPOINTS ABOVE
 	
 	return waypoint
 
 
-def waypointUpdate(streamingClient, waypoint):
+def waypointUpdate(streamingClient, true_state, waypoint):
 	'''
 	Keeps index of which waypoint to track. The waypoint switching is 
 	based on distance so it switches to the next when within a certain range 
 	of the current.
 	'''
 	# Attain current position (x,y,z)
-	true_state = trueState(streamingClient)
 	current_position = true_state[1]
 
 	try:
@@ -114,7 +124,7 @@ def waypointUpdate(streamingClient, waypoint):
 
 	# Distance to the next waypoint. Transition to next if within 50 cm.
 	distance_to_waypoint = np.linalg.norm(r_wd)
-	if distance_to_waypoint < 50:
+	if distance_to_waypoint < 150:
 		waypointUpdate.current_waypoint += 1
 		# r_wd will  be updated in next iteration to avoid IndexError's.
 
