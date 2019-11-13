@@ -29,7 +29,7 @@ FloatValue = struct.Struct( '<f' )
 DoubleValue = struct.Struct( '<d' )
 
 class NatNetClient:
-    def __init__( self ):
+    def __init__( self, body_id_drone, body_id_gate ):
         # Change this value to the IP address of the NatNet server.
         self.serverIPAddress = "192.168.1.100" 
 
@@ -49,6 +49,8 @@ class NatNetClient:
         # Set this to a callback method of your choice to receive per-rigid-body data at each frame.
         self.rigidBodyListener = None
         self.newFrameListener = None
+        self.body_id_drone = body_id_drone
+        self.body_id_gate = body_id_gate
         
         # NatNet stream version. This will be updated to the actual version the server is using during initialization.
         self.__natNetStreamVersion = (3,0,0,0)
@@ -90,7 +92,7 @@ class NatNetClient:
         return result
 
     # Unpack a rigid body object from a data packet
-    def __unpackRigidBody( self, data ):
+    def __unpackRigidBody( self, data):
         offset = 0
 
         # ID (4 bytes)
@@ -107,9 +109,12 @@ class NatNetClient:
         trace( "\tOrientation:", rot[0],",", rot[1],",", rot[2],",", rot[3] )
 
         # Send information to any listener.
-        if self.rigidBodyListener is not None:
+        if self.rigidBodyListener is not None and id == self.body_id_drone:
             # self.rigidBodyListener( id, pos, rot )
-            self.rigidBodyListener = np.array([id, np.array(pos), np.array(rot)])
+            self.rigidBodyListener[0] = np.array([id, np.array(pos), np.array(rot)])
+
+        if self.rigidBodyListener is not None and id == self.body_id_gate:
+            self.rigidBodyListener[1] = np.array([id, np.array(pos), np.array(rot)])
 
         # RB Marker Data ( Before version 3.0.  After Version 3.0 Marker data is in description )
         if( self.__natNetStreamVersion[0] < 3  and self.__natNetStreamVersion[0] != 0) :
