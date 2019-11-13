@@ -2,10 +2,11 @@ import numpy as np
 import cv2 as cv
 import glob
 
+import config
+
 # NOTE: THIS CALIBRATION HAS BEEN CONDUCTED WITH A RESOLUTION OF (960, 720), 
 # BUT THE CAMERA MATRIX WAS SCALED DOWN FOR (480, 360) IMAGES. 
-down_resolution = (480, 360)
-scale_factor = 0.5
+scale_factor = config.RESOLUTION[0] / 960   # 0.5 scale factor
 
 # termination criteria
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
@@ -53,7 +54,8 @@ print('Distortion matrix: \n', dist)
 # h,  w = img.shape[:2]
 # newcameramtx, roi = cv.getOptimalNewCameraMatrix(mtx, dist, (w,h), 1, (w,h))
 
-# 
+# Scale the camera matrix down to the resolution of the image that the image 
+# processing is going to be conducted on. Distortion coefficients are unaffected.
 mtx = mtx * scale_factor
 mtx[2, 2] = mtx[2, 2] / scale_factor    # should be back to 1
 print(mtx)
