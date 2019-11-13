@@ -157,6 +157,7 @@ class Tello:
 		# Send "streamon" command to start streaming video
 		self.sendCommandNoWait('streamon')
 		self.streamon = True
+		self.new_frame = False	# used to track when a new frame has arrived
 
 		if method == "H264Decoder":
 			# Bind video receiving socket
@@ -220,6 +221,8 @@ class Tello:
 				frame = frame[:, :w, :]
 				res_frame_list.append(frame)
 
+		# New frame fully decoded and ready therefore set flag to True
+		self.new_frame = True
 		return res_frame_list
 
 	def _updateFrameOpenCV(self):
@@ -227,6 +230,7 @@ class Tello:
 		while self.streamon:
 			try:
 				self.ret, self.frame = self.cap.read()
+				self.new_frame = True
 			except Exception as exc:
 				print('Exception in _updateFrame:', exc)
 
@@ -305,10 +309,20 @@ class Tello:
 	def rc(self, lr=0, fb=0, ud=0, yaw=0):
 		'''
 		Allows for 4 channel remote control type commands to be sent. 
-		The limits for each input is -100 to +100 (percent?)
+		The limits for each input is -100 to +100 and the command has to only be
+		sent once (i.e. no point is sending the same rc command repeatedly)
 		'''
-		return self.sendCommandNoWait('rc ' + str(lr) + ' ' + str(fb)
-			+ ' ' + str(ud) + ' ' + str(yaw))
+		command_string = 'rc ' + str(lr) + ' ' + str(fb) + ' ' + str(ud) \
+				+ ' ' + str(yaw)
+		try:
+			# Only send rc command if it is different to the previous one
+			if command_string != self.prev_rc_command:
+				self.prev_rc_command = command_string
+				return self.sendCommandNoWait(command_string)
+		except AttributeError:
+			# First run therefore declare the attribute and send command
+			self.prev_rc_command = command_string
+			return self.sendCommandNoWait(command_string)
 
 	# Read Commands
 	def getSpeed(self):
