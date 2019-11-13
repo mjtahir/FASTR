@@ -16,6 +16,7 @@ def estimatePosePnP(image_points):
 
 	# Convert Rodrigues vector to rotation matrix to extract Euler angles
 	rotation_matrix, _ = cv.Rodrigues(rvec)
+
 	# Proj_matrix = np.matmul(config.CAMERA_MATRIX, np.concatenate((rotation_matrix, tvec), axis=1))
 	# eulers = cv.decomposeProjectionMatrix(Proj_matrix)[-1]
 
@@ -30,7 +31,14 @@ def estimatePosePnP(image_points):
 		euler = np.array([0, 0, 0])
 		print('Non unique orientation')
 
-	return (sorted_points, rvec, tvec), (euler)
+	# Transpose (or invert) to find pose of gate w.r.t. the drone
+	rotation_matrix_wrt_drone = np.transpose(rotation_matrix)
+
+	# Position of drone w.r.t to the object coordinates
+	tvec_wrt_camera = -rotation_matrix_wrt_drone @ tvec
+	tvec_wrt_camera = tvec_wrt_camera.ravel()	# Change to 1D array
+
+	return (sorted_points, rvec, tvec), (euler, tvec_wrt_camera)
 
 
 def orderPoints(points):
