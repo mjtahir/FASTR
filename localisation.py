@@ -53,7 +53,6 @@ def trueState(streamingClient):
 
 	# Rotate coordinates to aircraft standard (forward x, right y, down z) from
 	# left x, back y, up z.
-	#rotated_pos = Cz(np.pi/2) @ Cx(np.pi/2) @ streamingClient.rigidBodyListener[1]
 	rotated_pos = Cx(np.pi) @ Cz(-np.pi/2) @ pos.T
 	rotated_pos = rotated_pos.T * 100		# change to cm
 
