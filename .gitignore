@@ -1,5 +1,6 @@
 # Folders
 __pycache__/
+Outputs/
 
 # Files
 manual_tello_vid.mp4
